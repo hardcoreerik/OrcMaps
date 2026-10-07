@@ -176,7 +176,7 @@ docs/                 Architecture/decision/porting/licensing documents.
    then `RenderFeatureTile` per source tile → `RenderTarget` (host
    framebuffer). Viewport enumerates unique source tiles (X wrap, Y
    clamp). Overzoom is rejected. M5GFX DisplayTarget consumes this seam.
-8. **Not yet implemented:** overzoom, polygon holes, text labels, tile
+8. **Not yet implemented:** overzoom, text labels, tile
    cache, pack discovery, Brotli/zstd tile compression, OrcSDR
    integration.
 
@@ -287,9 +287,14 @@ storage (per-feature layer string + extent) is provisional.
 `ResolveFeatureStyle(kBackground)`. `RenderFeatureTile()` then draws one
 source tile **without** clearing. Returns false on null target, invalid
 zoom, or `source_tile.z != viewport.zoom` (overzoom is not guessed).
-Unclassified features (`kind_assigned == false`) are skipped. Polygon fill
-uses the **first path only** as a simple outer ring; additional paths
-(holes) are not subtracted — locked by `tests/host/test_render.cpp`.
+Unclassified features (`kind_assigned == false`) are skipped. A polygon
+feature's rings are grouped into parts: a ring that winds like the first ring
+starts a new exterior part and an opposite-winding ring is a hole in the
+current part. Each part is filled with the even-odd rule through
+`RenderTarget::FillPolygonRings`, so holes are subtracted and every part of a
+multipolygon is drawn — locked by `tests/host/test_render.cpp`. A target that
+does not override `FillPolygonRings` falls back to filling the first ring of
+each part.
 Strokes use `MapPaint::width_px` through `RenderTarget::DrawLine`
 (`include/orcmap/stroke.hpp`: ≤1 px is one pixel; >1 is a centered
 square brush of nearest-integer width). Label FeatureKinds are skipped

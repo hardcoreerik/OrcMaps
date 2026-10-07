@@ -28,8 +28,9 @@ bool ClearMapBackground(const Viewport& viewport, const MapStyle& style,
 // Features with kind_assigned == false are skipped (not guessed).
 // Label kinds (kLabelPrimary/Secondary/Muted) are skipped until text
 // rendering exists -- they are not drawn as placeholder point pixels.
-// Polygon fill uses the first path only as a simple outer ring; additional
-// paths (holes) are not subtracted -- see ARCHITECTURE.md.
+// A polygon feature's rings are grouped into parts (a ring that winds like the
+// first starts a new exterior part; the opposite winding is a hole) and each
+// part is filled even-odd, so holes are subtracted -- see ARCHITECTURE.md.
 // Line strokes use MapPaint::width_px via RenderTarget::DrawLine.
 
 bool RenderFeatureTile(const FeatureTile& features, TileId source_tile,

@@ -330,10 +330,9 @@ storage.
 
 ## 8. Known limitations in 0.2.0
 
-- Polygons are filled from their first ring only. On the Natural Earth world
-  packs some tiles show as lighter tile-shaped patches (unfilled land), and
-  admin boundaries appear only in those patches. Present since before 0.2.0,
-  in both the batch and streaming paths.
+- (0.2.0 and 0.2.1 only) Polygons were filled from their first ring only, so on the Natural Earth world packs some
+  tiles showed as tile-shaped patches of unpainted land or ocean. Fixed after 0.2.1: every ring is filled and
+  holes are subtracted (`RenderTarget::FillPolygonRings`; see CHANGELOG.md). Pin a commit that includes the fix.
 - No text or labels, no overzoom, no tile cache, no overlay API.
 - Classification is experimental and required (section 3).
 - Streaming does not verify the gzip CRC-32 (section 4).

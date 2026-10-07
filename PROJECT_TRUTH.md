@@ -232,7 +232,7 @@ Host-proof renderer exists: `ClearMapBackground` once per frame, then
 from `ResolveFeatureStyle()`. Projection uses a prepared `TileScreenMap`
 (Mercator once per tile, multiply-add per vertex). `orcmap::Color` is
 plain RGBA8. Unclassified features are skipped. Zoom mismatch returns
-false. This is not a complete map engine (no overzoom, no holes, no
+false. This is not a complete map engine (no overzoom, no
 text labels). Visible tiles are enumerated with wrapped X. Line width
 comes from `MapPaint`.
 

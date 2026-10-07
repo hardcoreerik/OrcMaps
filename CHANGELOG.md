@@ -5,6 +5,34 @@ OrcMaps follows semantic versioning with pre-1.0 discipline (see
 change, but only in a new minor version, and every such change is listed here.
 Consumers pin a release by its full commit SHA (`docs/ORCSDR_INTEGRATION.md`).
 
+## Unreleased
+
+### Fixed
+
+- **Every ring of a polygon is now filled, and holes are subtracted.** The
+  renderer used to fill only the first ring of a polygon feature, so a
+  multipolygon lost every part after the first and holes were never cut out.
+  The Natural Earth world overview packs a continent or an ocean as several
+  parts in one feature, so world views showed whole landmasses and ocean areas
+  (Australia, Japan, Indonesia, parts of the Atlantic and Indian Ocean) as
+  unpainted tile-shaped patches, with admin boundaries visible only inside
+  those patches. Rings are now grouped into parts (a ring winding like the
+  first is a new exterior part, the opposite winding is a hole) and each part
+  is filled even-odd.
+
+### Added
+
+- `RenderTarget::FillPolygonRings(xy_pairs, ring_point_counts, ring_count,
+  color)`: one polygon made of several rings, even-odd. It has a default
+  implementation that fills only the first ring, which is the previous
+  behaviour, so an existing `RenderTarget` keeps compiling and drawing as
+  before. The host `FramebufferTarget` and the M5GFX `DisplayTarget` override
+  it; `FillPolygon` is now the single-ring case.
+
+### Removed
+
+- The "polygons are filled from their first ring only" known limitation.
+
 ## 0.2.1 — 2026-09-25
 
 ### Fixed
@@ -92,9 +120,6 @@ entry lists what 0.2.0 adds over that baseline for a consumer.
 
 ### Known limitations
 
-- Polygons are filled from their first ring only. On the Natural Earth
-  world packs this leaves some tiles with unfilled land (visible as
-  tile-shaped patches) and makes boundaries show only in those tiles.
 - The streaming path does not verify the gzip CRC-32 of a tile.
 - No tile cache and no overlay API yet.
 - Feature classification is still `experimental::TryClassifyFeature`,

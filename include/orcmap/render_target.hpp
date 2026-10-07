@@ -30,7 +30,7 @@ class RenderTarget {
                         float width_px) = 0;
 
   // Simple filled polygon, `n_points` vertices as [x0,y0,x1,y1,...].
-  // No holes. n_points < 3 is a no-op. The target clips to its bounds.
+  // One ring, no holes (use FillPolygonRings for those). n_points < 3 is a no-op. The target clips to its bounds.
   virtual void FillPolygon(const int* xy_pairs, size_t n_points, Color color) = 0;
 
   // One polygon made of several rings, filled with the even-odd rule: an exterior ring and the holes inside it.

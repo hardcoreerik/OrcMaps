@@ -33,7 +33,7 @@ namespace m5gfx_adapter {
 // Alpha: ToRgb565 ignores Color.a (opaque RGB565).
 // Lines: MapPaint::width_px via shared RasterizeCenteredStroke (1px uses
 // LovyanGFX drawLine). FillPolygon: even-odd scanline of the given
-// vertices (renderer already passes first path only).
+// vertices; FillPolygonRings does the same across several rings (holes).
 
 class DisplayTarget : public RenderTarget {
  public:
