@@ -197,10 +197,9 @@ void TestZeroSizeTargetIsSafe() {
   ORCMAP_EXPECT_EQ(fb.Height(), 0);
 }
 
-void TestPolygonExtraPathsAreNotFilled() {
-  // Limitation: only the first polygon path is filled. Extra paths are
-  // ignored (holes are not subtracted). This test locks that so it cannot
-  // silently become "fill every ring as a solid".
+void TestPolygonWithTwoExteriorRingsFillsBoth() {
+  // A multipolygon feature: two exterior rings with the same winding are two parts and both are filled. (Before
+  // this, only the first ring was filled, which left whole ocean and land areas unpainted in world-overview tiles.)
   orcmap::Feature f;
   f.kind = orcmap::FeatureKind::kWater;
   f.kind_assigned = true;
@@ -220,9 +219,64 @@ void TestPolygonExtraPathsAreNotFilled() {
       orcmap::ResolveFeatureStyle(orcmap::FeatureKind::kWater, 0,
                                   orcmap::styles::OrcSdrDark())
           .color;
-  const orcmap::Color bg = orcmap::Color::Rgb(8, 10, 12);
   ORCMAP_EXPECT_TRUE(fb.At(4, 16) == water);
-  ORCMAP_EXPECT_TRUE(fb.At(28, 16) == bg);
+  ORCMAP_EXPECT_TRUE(fb.At(28, 16) == water);
+}
+
+orcmap::Path ReverseRing(orcmap::Path ring) {
+  return orcmap::Path(ring.rbegin(), ring.rend());
+}
+
+void TestPolygonHoleIsSubtracted() {
+  // An exterior ring with a hole of the opposite winding: the hole shows the background and the surrounding ring is
+  // filled. A second, separate exterior part is still filled.
+  orcmap::Feature f;
+  f.kind = orcmap::FeatureKind::kWater;
+  f.kind_assigned = true;
+  f.extent = 4096;
+  f.geometry.type = orcmap::GeomType::kPolygon;
+  f.geometry.paths.push_back(Rect(0, 0, 3072, 4096));                    // exterior
+  f.geometry.paths.push_back(ReverseRing(Rect(512, 1536, 2048, 2560)));  // hole inside it
+  f.geometry.paths.push_back(Rect(3328, 0, 4096, 4096));                 // a second exterior part
+  orcmap::FeatureTile tile;
+  tile.features.push_back(f);
+  orcmap::host::FramebufferTarget fb(64, 64);
+  const orcmap::Viewport vp = Z0Frame(64);
+  ORCMAP_EXPECT_TRUE(orcmap::ClearMapBackground(vp, orcmap::styles::OrcSdrDark(), &fb));
+  ORCMAP_EXPECT_TRUE(orcmap::RenderFeatureTile(tile, orcmap::TileId{0, 0, 0}, vp,
+                                               orcmap::styles::OrcSdrDark(), &fb));
+  const orcmap::Color water = orcmap::ResolveFeatureStyle(orcmap::FeatureKind::kWater, 0,
+                                                          orcmap::styles::OrcSdrDark())
+                                  .color;
+  const orcmap::Color bg = orcmap::Color::Rgb(8, 10, 12);
+  ORCMAP_EXPECT_TRUE(fb.At(4, 4) == water);     // exterior, away from the hole
+  ORCMAP_EXPECT_TRUE(fb.At(20, 32) == bg);      // inside the hole: not filled
+  ORCMAP_EXPECT_TRUE(fb.At(58, 32) == water);   // the second part
+  ORCMAP_EXPECT_TRUE(fb.At(50, 32) == bg);      // the gap between the parts stays background
+}
+
+void TestPolygonWindingConventionDoesNotMatter() {
+  // The exterior winding is taken from the first ring, so data with the opposite convention still renders.
+  orcmap::Feature f;
+  f.kind = orcmap::FeatureKind::kWater;
+  f.kind_assigned = true;
+  f.extent = 4096;
+  f.geometry.type = orcmap::GeomType::kPolygon;
+  f.geometry.paths.push_back(ReverseRing(Rect(0, 0, 4096, 4096)));
+  f.geometry.paths.push_back(Rect(1024, 1024, 3072, 3072));  // opposite winding to the first: a hole
+  orcmap::FeatureTile tile;
+  tile.features.push_back(f);
+  orcmap::host::FramebufferTarget fb(64, 64);
+  const orcmap::Viewport vp = Z0Frame(64);
+  ORCMAP_EXPECT_TRUE(orcmap::ClearMapBackground(vp, orcmap::styles::OrcSdrDark(), &fb));
+  ORCMAP_EXPECT_TRUE(orcmap::RenderFeatureTile(tile, orcmap::TileId{0, 0, 0}, vp,
+                                               orcmap::styles::OrcSdrDark(), &fb));
+  const orcmap::Color water = orcmap::ResolveFeatureStyle(orcmap::FeatureKind::kWater, 0,
+                                                          orcmap::styles::OrcSdrDark())
+                                  .color;
+  const orcmap::Color bg = orcmap::Color::Rgb(8, 10, 12);
+  ORCMAP_EXPECT_TRUE(fb.At(4, 4) == water);
+  ORCMAP_EXPECT_TRUE(fb.At(32, 32) == bg);
 }
 
 void TestPointAndLineString(const orcmap::MapStyle& style) {
@@ -299,7 +353,9 @@ void RunRenderTests(const std::string& mvt_fixture_path) {
   TestZoomMismatchIsRejected();
   TestInvalidViewportZoomIsRejected();
   TestZeroSizeTargetIsSafe();
-  TestPolygonExtraPathsAreNotFilled();
+  TestPolygonWithTwoExteriorRingsFillsBoth();
+  TestPolygonHoleIsSubtracted();
+  TestPolygonWindingConventionDoesNotMatter();
   TestPointAndLineString(orcmap::styles::OrcSdrDark());
   TestTinyMvtPipelineExperimentalClassifier(mvt_fixture_path);
 }

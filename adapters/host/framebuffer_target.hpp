@@ -25,6 +25,8 @@ class FramebufferTarget : public RenderTarget {
   void DrawLine(int x0, int y0, int x1, int y1, Color color,
                 float width_px = 1.0f) override;
   void FillPolygon(const int* xy_pairs, size_t n_points, Color color) override;
+  void FillPolygonRings(const int* xy_pairs, const size_t* ring_point_counts, size_t ring_count,
+                        Color color) override;
 
   Color At(int x, int y) const;
   const std::vector<Color>& Pixels() const { return pixels_; }

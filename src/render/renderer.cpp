@@ -1,10 +1,23 @@
 #include "orcmap/renderer.hpp"
 
+#include <cstdint>
 #include <vector>
 
 namespace orcmap {
 
 namespace {
+
+// Twice the signed area of a projected ring (shoelace). The sign is the ring's winding.
+int64_t SignedArea2(const int* xy, size_t n) {
+  if (n < 3) return 0;
+  int64_t sum = 0;
+  for (size_t i = 0; i < n; ++i) {
+    const size_t j = (i + 1) % n;
+    sum += static_cast<int64_t>(xy[i * 2]) * xy[j * 2 + 1] -
+           static_cast<int64_t>(xy[j * 2]) * xy[i * 2 + 1];
+  }
+  return sum;
+}
 
 void DrawPointMapped(RenderTarget* target, const TileScreenMap& map,
                      int32_t local_x, int32_t local_y, Color color) {
@@ -57,22 +70,50 @@ void RenderOneFeature(const Feature& feature, const TileScreenMap& map,
       }
       break;
     case GeomType::kPolygon:
-      // First path only: simple outer ring. Extra paths (holes) are not
-      // subtracted and are not filled -- locked by tests/host/test_render.cpp.
+      // A polygon feature holds several rings. MVT (and GeoJSON-like) data encodes a multipolygon as one feature whose
+      // rings are exterior rings (all with the winding of the first ring) and holes (the opposite winding). Each
+      // exterior ring starts a new part, and the holes that follow belong to it; a part is filled with the even-odd
+      // rule so its holes are subtracted. Natural Earth overview tiles rely on this: an ocean or a continent is often
+      // several parts in one feature, and filling only the first ring leaves the rest of the tile unpainted.
       if (feature.geometry.paths.empty()) break;
       {
-        const Path& ring = feature.geometry.paths[0];
-        if (ring.size() < 3) break;
-        poly_xy->clear();
-        poly_xy->reserve(ring.size() * 2);
-        for (const Point& p : ring) {
-          int sx = 0;
-          int sy = 0;
-          ProjectLocal(map, p.x, p.y, &sx, &sy);
-          poly_xy->push_back(sx);
-          poly_xy->push_back(sy);
+        std::vector<int>& xy = *poly_xy;
+        xy.clear();
+        std::vector<size_t> counts;       // vertices per ring of the part being built
+        int64_t exterior_sign = 0;        // winding of the first non-degenerate ring
+        auto flush = [&]() {
+          if (!counts.empty()) {
+            target->FillPolygonRings(xy.data(), counts.data(), counts.size(), paint.color);
+          }
+          xy.clear();
+          counts.clear();
+        };
+        for (const Path& ring : feature.geometry.paths) {
+          if (ring.size() < 3) continue;
+          const size_t first = xy.size();
+          for (const Point& p : ring) {
+            int sx = 0;
+            int sy = 0;
+            ProjectLocal(map, p.x, p.y, &sx, &sy);
+            xy.push_back(sx);
+            xy.push_back(sy);
+          }
+          const int64_t area = SignedArea2(xy.data() + first, ring.size());
+          const int64_t sign = area > 0 ? 1 : area < 0 ? -1 : 0;
+          if (exterior_sign == 0) exterior_sign = sign;
+          // A ring that winds like the first one is a new exterior ring; the opposite winding is a hole in the
+          // current part. A degenerate (zero-area) ring is kept with the current part.
+          const bool new_exterior = sign != 0 && sign == exterior_sign;
+          if (new_exterior && !counts.empty()) {
+            // Close out the previous part: move this ring's vertices aside, flush, then restore them.
+            std::vector<int> pending(xy.begin() + static_cast<std::ptrdiff_t>(first), xy.end());
+            xy.resize(first);
+            flush();
+            xy = pending;
+          }
+          counts.push_back(ring.size());
         }
-        target->FillPolygon(poly_xy->data(), poly_xy->size() / 2, paint.color);
+        flush();
       }
       break;
     case GeomType::kUnknown:

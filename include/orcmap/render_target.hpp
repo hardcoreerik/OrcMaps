@@ -32,6 +32,16 @@ class RenderTarget {
   // Simple filled polygon, `n_points` vertices as [x0,y0,x1,y1,...].
   // No holes. n_points < 3 is a no-op. The target clips to its bounds.
   virtual void FillPolygon(const int* xy_pairs, size_t n_points, Color color) = 0;
+
+  // One polygon made of several rings, filled with the even-odd rule: an exterior ring and the holes inside it.
+  // `xy_pairs` holds every ring's vertices back to back as [x0,y0,x1,y1,...]; `ring_point_counts[i]` is the vertex
+  // count of ring i. The default fills only the first ring, which is the behaviour a target had before this existed,
+  // so an existing RenderTarget keeps compiling and drawing exactly as it did; targets that can do better override it.
+  virtual void FillPolygonRings(const int* xy_pairs, const size_t* ring_point_counts,
+                                size_t ring_count, Color color) {
+    if (xy_pairs == nullptr || ring_point_counts == nullptr || ring_count == 0) return;
+    FillPolygon(xy_pairs, ring_point_counts[0], color);
+  }
 };
 
 }  // namespace orcmap

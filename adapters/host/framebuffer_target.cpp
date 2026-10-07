@@ -57,13 +57,21 @@ void FramebufferTarget::DrawLine(int x0, int y0, int x1, int y1, Color color,
 
 void FramebufferTarget::FillPolygon(const int* xy_pairs, size_t n_points,
                                     Color color) {
-  if (xy_pairs == nullptr || n_points < 3) return;
+  FillPolygonRings(xy_pairs, &n_points, 1, color);
+}
+
+void FramebufferTarget::FillPolygonRings(const int* xy_pairs, const size_t* ring_point_counts,
+                                         size_t ring_count, Color color) {
+  if (xy_pairs == nullptr || ring_point_counts == nullptr || ring_count == 0) return;
   if (width_ <= 0 || height_ <= 0) return;
+  size_t total_points = 0;
+  for (size_t r = 0; r < ring_count; ++r) total_points += ring_point_counts[r];
+  if (total_points < 3) return;
   int min_y = xy_pairs[1];
   int max_y = xy_pairs[1];
   int min_x = xy_pairs[0];
   int max_x = xy_pairs[0];
-  for (size_t i = 0; i < n_points; ++i) {
+  for (size_t i = 0; i < total_points; ++i) {
     const int x = xy_pairs[i * 2];
     const int y = xy_pairs[i * 2 + 1];
     if (y < min_y) min_y = y;
@@ -75,31 +83,37 @@ void FramebufferTarget::FillPolygon(const int* xy_pairs, size_t n_points,
   if (min_y < 0) min_y = 0;
   if (max_y >= height_) max_y = height_ - 1;
   std::vector<int> crossings;
-  crossings.reserve(n_points);
+  crossings.reserve(total_points);
   for (int y = min_y; y <= max_y; ++y) {
     crossings.clear();
-    for (size_t i = 0; i < n_points; ++i) {
-      const size_t j = (i + 1) % n_points;
-      const int y0 = xy_pairs[i * 2 + 1];
-      const int y1 = xy_pairs[j * 2 + 1];
-      const int x0 = xy_pairs[i * 2];
-      const int x1 = xy_pairs[j * 2];
-      if (y0 == y1) continue;
-      const int lo = y0 < y1 ? y0 : y1;
-      const int hi = y0 < y1 ? y1 : y0;
-      if (y < lo || y >= hi) continue;
-      const int64_t num = (static_cast<int64_t>(y) - static_cast<int64_t>(y0)) *
-                          (static_cast<int64_t>(x1) - static_cast<int64_t>(x0));
-      const int64_t den =
-          static_cast<int64_t>(y1) - static_cast<int64_t>(y0);
-      const int64_t x = static_cast<int64_t>(x0) + num / den;
-      if (x > static_cast<int64_t>(std::numeric_limits<int>::max())) {
-        crossings.push_back(std::numeric_limits<int>::max());
-      } else if (x < static_cast<int64_t>(std::numeric_limits<int>::min())) {
-        crossings.push_back(std::numeric_limits<int>::min());
-      } else {
-        crossings.push_back(static_cast<int>(x));
+    size_t base = 0;   // index of the first vertex of the current ring
+    for (size_t r = 0; r < ring_count; ++r) {
+      const size_t n_points = ring_point_counts[r];
+      if (n_points >= 3) {
+        for (size_t i = 0; i < n_points; ++i) {
+          const size_t j = (i + 1) % n_points;
+          const int y0 = xy_pairs[(base + i) * 2 + 1];
+          const int y1 = xy_pairs[(base + j) * 2 + 1];
+          const int x0 = xy_pairs[(base + i) * 2];
+          const int x1 = xy_pairs[(base + j) * 2];
+          if (y0 == y1) continue;
+          const int lo = y0 < y1 ? y0 : y1;
+          const int hi = y0 < y1 ? y1 : y0;
+          if (y < lo || y >= hi) continue;
+          const int64_t num = (static_cast<int64_t>(y) - static_cast<int64_t>(y0)) *
+                              (static_cast<int64_t>(x1) - static_cast<int64_t>(x0));
+          const int64_t den = static_cast<int64_t>(y1) - static_cast<int64_t>(y0);
+          const int64_t x = static_cast<int64_t>(x0) + num / den;
+          if (x > static_cast<int64_t>(std::numeric_limits<int>::max())) {
+            crossings.push_back(std::numeric_limits<int>::max());
+          } else if (x < static_cast<int64_t>(std::numeric_limits<int>::min())) {
+            crossings.push_back(std::numeric_limits<int>::min());
+          } else {
+            crossings.push_back(static_cast<int>(x));
+          }
+        }
       }
+      base += n_points;
     }
     std::sort(crossings.begin(), crossings.end());
     for (size_t k = 0; k + 1 < crossings.size(); k += 2) {
