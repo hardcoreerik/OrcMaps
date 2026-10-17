@@ -1,5 +1,7 @@
 #include "orcmap/experimental/mvt_classify.hpp"
 #include "orcmap/mvt.hpp"
+#include "orcmap/mvt_stream.hpp"
+#include <new>
 
 #include <algorithm>
 #include <cstring>
@@ -342,6 +344,30 @@ void TestBasemapFilterSkipsPlaceOnFixture(const std::string& fixture_path) {
   ORCMAP_EXPECT_TRUE(FindLayer(tile, "water") != nullptr);
 }
 
+void TestStreamingCleanupReleasesOversizeOnFailure() {
+  for(bool throws : {false,true}) {
+    orcmap::MvtStreamScratch scratch;
+    scratch.feature_bytes.resize(orcmap::kMaxRetainedFeatureBytes+1024);
+    scratch.layers.resize(1);
+    scratch.feature.geometry.paths.resize(1);
+    scratch.feature.geometry.paths[0].reserve(orcmap::kRetainedGeometryPoints+1);
+    orcmap::MvtStreamOptions options;
+    options.feature_sink=[](const orcmap::Feature&,void*) {return true;};
+    const auto reader=[](void* context,uint64_t,uint8_t*,size_t)->size_t {
+      if(*static_cast<bool*>(context))throw std::bad_alloc();
+      return 0;
+    };
+    bool caught=false;
+    try {
+      ORCMAP_EXPECT_TRUE(!orcmap::StreamMvtTile(orcmap::Compression::kGzip,reader,&throws,0,18,options,&scratch));
+    } catch(const std::bad_alloc&) {caught=true;}
+    ORCMAP_EXPECT_EQ(caught,throws);
+    ORCMAP_EXPECT_EQ(scratch.feature_bytes.capacity(),static_cast<size_t>(0));
+    ORCMAP_EXPECT_EQ(scratch.layers.capacity(),static_cast<size_t>(0));
+    ORCMAP_EXPECT_EQ(scratch.feature.geometry.paths.capacity(),static_cast<size_t>(0));
+  }
+}
+
 void TestTruncatedFixtureFails(const std::string& fixture_path) {
   std::vector<uint8_t> data = ReadFile(fixture_path);
   ORCMAP_EXPECT_TRUE(data.size() > 10);
@@ -360,6 +386,7 @@ void RunMvtTests(const std::string& fixture_path) {
   TestEmptyBufferFails();
   TestGarbageBufferFails();
   TestTruncatedFixtureFails(fixture_path);
+  TestStreamingCleanupReleasesOversizeOnFailure();
   TestFilterNullMatchesLegacy(fixture_path);
   TestFilterExcludesRequestedLayer(fixture_path);
   TestFilterCallbackReceivesNames(fixture_path);

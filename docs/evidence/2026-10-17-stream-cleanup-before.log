@@ -1,0 +1,24 @@
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+-- Configuring done (0.0s)
+-- Generating done (0.1s)
+-- Build files have been written to: F:/Ai/OrcSDR-Temp/orcmaps-integration-completion/.local/rings-host-msvc
+MSBuild version 18.3.0-release-26070-10+3972042b7 for .NET Framework
+
+  mvt_stream.cpp
+LINK : warning LNK4300: ignoring '/INCREMENTAL' because input module contains ASAN metadata [F:\Ai\OrcSDR-Temp\orcmaps-integration-completion\.local\rings-host-msvc\orcmap_host_tests.vcxproj]
+  orcmap_host_tests.vcxproj -> F:\Ai\OrcSDR-Temp\orcmaps-integration-completion\.local\rings-host-msvc\RelWithDebInfo\orcmap_host_tests.exe
+Test project F:/Ai/OrcSDR-Temp/orcmaps-integration-completion/.local/rings-host-msvc
+    Start 1: orcmap_host_tests
+1/1 Test #1: orcmap_host_tests ................***Failed    0.15 sec
+FAIL F:\Ai\OrcSDR-Temp\orcmaps-integration-completion\tests\host\test_mvt.cpp:365: scratch.feature_bytes.capacity() != static_cast<size_t>(0)
+FAIL F:\Ai\OrcSDR-Temp\orcmaps-integration-completion\tests\host\test_mvt.cpp:365: scratch.feature_bytes.capacity() != static_cast<size_t>(0)
+FAIL: 2 OrcMaps host test assertion(s) failed
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   0.18 sec
+
+The following tests FAILED:
+	  1 - orcmap_host_tests (Failed)
+Errors while running CTest

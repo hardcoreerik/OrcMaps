@@ -192,12 +192,11 @@ bool StreamMvtTile(Compression compression, CompressedChunkReader reader,
         std::vector<Path>().swap(scratch->feature.geometry.paths);
       }
       if (scratch->feature_bytes.capacity() > kMaxRetainedFeatureBytes) {
-        std::vector<uint8_t> trimmed(scratch->feature_bytes);
-        trimmed.swap(scratch->feature_bytes);
+        // Cleanup also runs while unwinding bad_alloc: never allocate here.
+        std::vector<uint8_t>().swap(scratch->feature_bytes);
       }
       // Layer tables belong to one tile only.
-      scratch->layers.clear();
-      scratch->layers.shrink_to_fit();
+      std::vector<MvtStreamScratch::LayerTables>().swap(scratch->layers);
     }
   } trim{scratch};
 
