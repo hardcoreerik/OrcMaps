@@ -64,6 +64,18 @@ target_include_directories(orcmap_host_tests PRIVATE
 )
 
 enable_testing()
+add_executable(orcmap_screen_bounds_tests
+    test_screen_bounds.cpp
+    ${ORCMAP_ROOT}/src/core/geo.cpp
+    ${ORCMAP_ROOT}/src/core/viewport.cpp
+    ${ORCMAP_ROOT}/src/render/style.cpp
+    ${ORCMAP_ROOT}/src/render/renderer.cpp
+    ${ORCMAP_ROOT}/src/render/clip.cpp
+    ${ORCMAP_ROOT}/adapters/host/framebuffer_target.cpp
+)
+target_include_directories(orcmap_screen_bounds_tests PRIVATE
+    ${ORCMAP_ROOT}/include ${ORCMAP_ROOT}/adapters/host)
+add_test(NAME orcmap_screen_bounds_tests COMMAND orcmap_screen_bounds_tests)
 add_test(
     NAME orcmap_host_tests
     COMMAND orcmap_host_tests ${ORCMAP_ROOT}/tests/fixtures/tiny.pmtiles

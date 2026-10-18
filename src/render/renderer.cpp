@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "orcmap/stroke.hpp"
+
 namespace orcmap {
 
 namespace {
@@ -236,10 +238,14 @@ bool ProjectFeatureToScreen(const Feature& feature, const TileScreenMap& map,
     if (y < min_y) min_y = y;
     if (y > max_y) max_y = y;
   }
-  out->min_x = min_x;
-  out->max_x = max_x;
-  out->min_y = min_y;
-  out->max_y = max_y;
+  // Band culling needs painted bounds, including the centered stroke brush.
+  const int stroke = is_line ? RasterStrokeWidthPx(paint.width_px) : 1;
+  const int before = stroke / 2;
+  const int after = stroke > 0 ? stroke - before - 1 : 0;
+  out->min_x = min_x - before;
+  out->max_x = max_x + after;
+  out->min_y = min_y - before;
+  out->max_y = max_y + after;
   return true;
 }
 
