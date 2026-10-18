@@ -24,6 +24,11 @@ namespace experimental {
 // Returns true and writes `kind` if the heuristic recognizes `feature`.
 bool TryClassifyFeature(const Feature& feature, FeatureKind* kind);
 
+// Streaming equivalent of AssignFeatureKindsForProfile. Unsupported profiles,
+// unrecognized features and null outputs fail without changing the output.
+bool TryClassifyFeatureForProfile(std::string_view schema_version,
+                                  const Feature& feature, FeatureKind* kind);
+
 // Best-effort: sets kind/kind_assigned only on features this heuristic
 // recognizes. Returns false if `tile` is null; empty tiles succeed.
 bool AssignFeatureKinds(FeatureTile* tile);

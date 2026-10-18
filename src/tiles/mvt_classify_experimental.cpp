@@ -220,36 +220,30 @@ bool AssignFeatureKinds(FeatureTile* tile) {
   return true;
 }
 
+bool TryClassifyFeatureForProfile(std::string_view schema_version,
+                                  const Feature& feature, FeatureKind* kind) {
+  if (kind == nullptr) return false;
+  if (schema_version == "openmaptiles-3.16") return TryClassifyFeature(feature, kind);
+  if (schema_version == "protomaps-v4") return ClassifyProtomapsV4(feature, kind);
+  if (schema_version != "orcmaps-overview-1") return false;
+  if (feature.layer == "land") *kind = FeatureKind::kLand;
+  else if (feature.layer == "water" || feature.layer == "waterway") *kind = FeatureKind::kWater;
+  else if (feature.layer == "boundary") *kind = FeatureKind::kBoundary;
+  else if (feature.layer == "place") *kind = FeatureKind::kLabelPrimary;
+  else return false;
+  return true;
+}
+
 bool AssignFeatureKindsForProfile(std::string_view schema_version,
                                   FeatureTile* tile) {
-  if (tile == nullptr) return false;
-  if (schema_version == "openmaptiles-3.16") return AssignFeatureKinds(tile);
-  if (schema_version == "protomaps-v4") {
-    for (Feature& feature : tile->features) {
-      FeatureKind kind;
-      if (ClassifyProtomapsV4(feature, &kind)) {
-        feature.kind = kind;
-        feature.kind_assigned = true;
-      }
-    }
-    return true;
-  }
-  if (schema_version != "orcmaps-overview-1") return false;
+  if (tile == nullptr || (schema_version != "openmaptiles-3.16" &&
+      schema_version != "protomaps-v4" && schema_version != "orcmaps-overview-1")) return false;
   for (Feature& feature : tile->features) {
     FeatureKind kind;
-    if (feature.layer == "land") {
-      kind = FeatureKind::kLand;
-    } else if (feature.layer == "water" || feature.layer == "waterway") {
-      kind = FeatureKind::kWater;
-    } else if (feature.layer == "boundary") {
-      kind = FeatureKind::kBoundary;
-    } else if (feature.layer == "place") {
-      kind = FeatureKind::kLabelPrimary;
-    } else {
-      continue;
+    if (TryClassifyFeatureForProfile(schema_version, feature, &kind)) {
+      feature.kind = kind;
+      feature.kind_assigned = true;
     }
-    feature.kind = kind;
-    feature.kind_assigned = true;
   }
   return true;
 }

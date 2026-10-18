@@ -64,6 +64,11 @@ target_include_directories(orcmap_host_tests PRIVATE
 )
 
 enable_testing()
+add_executable(orcmap_label_tests test_labels.cpp ${ORCMAP_ROOT}/src/render/labels.cpp
+    ${ORCMAP_ROOT}/src/core/geo.cpp ${ORCMAP_ROOT}/src/core/viewport.cpp
+    ${ORCMAP_ROOT}/src/render/style.cpp)
+target_include_directories(orcmap_label_tests PRIVATE ${ORCMAP_ROOT}/include)
+add_test(NAME orcmap_label_tests COMMAND orcmap_label_tests)
 add_executable(orcmap_profile_tests test_profiles.cpp
     ${ORCMAP_ROOT}/src/tiles/mvt_classify_experimental.cpp)
 target_include_directories(orcmap_profile_tests PRIVATE ${ORCMAP_ROOT}/include)

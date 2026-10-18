@@ -23,6 +23,10 @@ void Check(const char* layer, const char* kind, const char* detail, G geometry,
   Expect(orcmap::experimental::AssignFeatureKindsForProfile("protomaps-v4", &tile),
          "explicit profile accepted");
   Expect(tile.features[0].kind_assigned == assigned, layer);
+  K streamed = K::kBackground;
+  Expect(orcmap::experimental::TryClassifyFeatureForProfile("protomaps-v4", f, &streamed)
+             == assigned, "streaming and batch recognition agree");
+  if (assigned) Expect(streamed == expected, "streaming and batch kinds agree");
   if (assigned) Expect(tile.features[0].kind == expected, detail);
   Expect(std::get<std::string>(tile.features[0].property_values[2]) == "original",
          "original name preserved");
@@ -88,12 +92,21 @@ int main() {
   Expect(orcmap::experimental::AssignFeatureKindsForProfile("openmaptiles-3.16", &tile)
          && tile.features[0].kind == K::kMotorway, "existing OpenMapTiles mapping");
   const auto saved = tile.features[0].kind;
+  K streamed = K::kWater;
+  Expect(!orcmap::experimental::TryClassifyFeatureForProfile("unknown", old, &streamed)
+         && streamed == K::kWater, "unknown streaming profile preserves output");
+  Expect(!orcmap::experimental::TryClassifyFeatureForProfile("protomaps-v4", old, nullptr),
+         "null streaming output rejected");
+  Expect(orcmap::experimental::TryClassifyFeatureForProfile("openmaptiles-3.16", old, &streamed)
+         && streamed == saved, "streaming preserves OpenMapTiles mapping");
   Expect(!orcmap::experimental::AssignFeatureKindsForProfile("unknown", &tile)
          && tile.features[0].kind == saved, "unknown profile leaves tile unchanged");
   Expect(!orcmap::experimental::AssignFeatureKindsForProfile("protomaps-v4", nullptr),
          "null tile rejected");
   tile.features.clear();
   old.layer = "water";
+  Expect(orcmap::experimental::TryClassifyFeatureForProfile("orcmaps-overview-1", old, &streamed)
+         && streamed == K::kWater, "streaming preserves overview mapping");
   old.kind_assigned = false;
   tile.features.push_back(old);
   Expect(orcmap::experimental::AssignFeatureKindsForProfile("orcmaps-overview-1", &tile)
