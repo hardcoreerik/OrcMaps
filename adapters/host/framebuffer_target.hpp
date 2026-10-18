@@ -19,6 +19,8 @@ class FramebufferTarget : public RenderTarget {
 
   int Width() const override { return width_; }
   int Height() const override { return height_; }
+  PixelRect ClipRect() const override { return clip_; }
+  bool SetClipRect(PixelRect rect) override;
 
   void FillRect(int x, int y, int w, int h, Color color) override;
   void DrawPoint(int x, int y, Color color) override;
@@ -39,6 +41,7 @@ class FramebufferTarget : public RenderTarget {
 
   int width_ = 0;
   int height_ = 0;
+  PixelRect clip_;
   std::vector<Color> pixels_;
 };
 
