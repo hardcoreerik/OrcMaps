@@ -10,6 +10,11 @@ CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
+# The chip is a 240 MHz part and every CPU cost in a frame is now on the
+# critical path (the display bus is fixed at 80 MHz, so this is the only
+# headroom left). At the IDF default of 160 MHz, rasterizing a banded frame
+# cost ~30 ms; at 240 MHz the same work is ~20 ms.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 
 # No CONFIG_SPIRAM: this chip has none. Setting it would fail to boot.
 

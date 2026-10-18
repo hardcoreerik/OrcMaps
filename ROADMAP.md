@@ -314,7 +314,7 @@ network access or a remote service.
 
 ## Release milestones
 
-First tagged release: `v0.2.0`; current: `v0.2.3` (`idf_component.yml`
-declares `version: "0.2.3"`). 0.1.0 was the untagged in-development version. What
+First tagged release: `v0.2.0`; current: `v0.3.0` (`idf_component.yml`
+declares `version: "0.3.0"`). 0.1.0 was the untagged in-development version. What
 changed is in `CHANGELOG.md`; the consumer contract is
 `docs/ORCSDR_INTEGRATION.md`.

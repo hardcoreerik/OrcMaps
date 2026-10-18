@@ -424,8 +424,8 @@ reinvent, once pack download/install is built for OrcMaps-scale packs.
 
 Not yet wired up — OrcSDR's branch still uses its own `offline_map.cpp`.
 The intended boundary, once built: OrcSDR links OrcMaps as a version-pinned
-ESP-IDF component (`idf_component.yml`, `version: "0.2.3"`, tagged
-`v0.2.3`; see `docs/ORCSDR_INTEGRATION.md`), never includes OrcMaps' `src/` internals directly, and
+ESP-IDF component (`idf_component.yml`, `version: "0.3.0"`, tagged
+`v0.3.0`; see `docs/ORCSDR_INTEGRATION.md`), never includes OrcMaps' `src/` internals directly, and
 implements its own `adapters/esp_idf`-shaped `ByteSource` and any
 OrcSDR-specific overlay types entirely in OrcSDR's own code.
 

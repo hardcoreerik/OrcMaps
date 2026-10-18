@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include "orcmap/feature.hpp"
 #include "orcmap/geo.hpp"
 #include "orcmap/render_target.hpp"
@@ -78,5 +81,49 @@ bool RenderFeatureAt(const Feature& feature, const TilePlacement& placement,
 bool RenderFeatureAt(const Feature& feature, const TilePlacement& placement,
                      const Viewport& viewport, const MapStyle& style,
                      RenderTarget* target, RenderScratch* scratch);
+
+// ---------------------------------------------------------------------------
+// Screen-space cache
+// ---------------------------------------------------------------------------
+//
+// A feature projected once, so the same frame can be painted more than once
+// without repeating the per-vertex projection, the style lookup, or the
+// polygon-winding grouping. A target that paints in horizontal bands walks
+// this cache once per band and skips the features whose bounds miss that band,
+// which is what makes banded painting cost close to the width of the bus
+// instead of one SPI transaction per primitive.
+//
+// Pass the same ScreenFeature back in to reuse its buffers: after warm-up
+// projection does not allocate.
+
+struct ScreenFeature {
+  GeomType type = GeomType::kUnknown;
+  Color color{};
+  float width_px = 1.0f;
+  // Screen x,y pairs, every path's vertices back to back.
+  std::vector<int> xy;
+  // Vertices per path: one entry per line string, or one per polygon ring.
+  std::vector<size_t> path_counts;
+  // Winding sign per polygon ring (+1, -1, or 0 for a degenerate ring).
+  std::vector<int8_t> ring_sign;
+  // Inclusive screen bounds of everything this feature would paint.
+  int64_t min_x = 0;
+  int64_t min_y = 0;
+  int64_t max_x = 0;
+  int64_t max_y = 0;
+};
+
+// Projects one feature into `out`, reusing its buffers. Returns false when the
+// feature would paint nothing -- kind unassigned, a label kind, hidden by the
+// style, or no drawable path -- which are exactly the rules RenderFeatureAt
+// applies. `map` must be built for this feature's tile and placement.
+bool ProjectFeatureToScreen(const Feature& feature, const TileScreenMap& map,
+                            const Viewport& viewport, const MapStyle& style,
+                            ScreenFeature* out);
+
+// Paints a ScreenFeature produced by ProjectFeatureToScreen. A host test pins
+// this to be pixel-identical to RenderFeatureAt for the same features, so the
+// two paths cannot drift.
+void DrawScreenFeature(const ScreenFeature& feature, RenderTarget* target);
 
 }  // namespace orcmap

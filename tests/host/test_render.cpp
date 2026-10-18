@@ -391,6 +391,98 @@ void TestRenderScratchMatchesFreshScratch() {
   }
 }
 
+// The screen-space cache is a second painting path over the same geometry. If
+// the two ever disagree, one has drifted -- so this pins them to identical
+// pixels across every geometry type, a multipolygon with a hole, and a stroked
+// (width > 1) line.
+void TestScreenFeatureMatchesDirectRender() {
+  const orcmap::MapStyle& style = orcmap::styles::OrcSdrDark();
+  const orcmap::Viewport vp = Z0Frame(64);
+
+  orcmap::FeatureTile tile;
+
+  // Multipolygon: two exterior rings with the same winding and one hole with
+  // the opposite winding, so the part-grouping rule is exercised.
+  orcmap::Feature multi;
+  multi.kind = orcmap::FeatureKind::kWater;
+  multi.kind_assigned = true;
+  multi.extent = 4096;
+  multi.geometry.type = orcmap::GeomType::kPolygon;
+  multi.geometry.paths.push_back({orcmap::Point{200, 200}, orcmap::Point{1600, 200},
+                                  orcmap::Point{1600, 1600}, orcmap::Point{200, 1600}});
+  multi.geometry.paths.push_back({orcmap::Point{2400, 2400}, orcmap::Point{3700, 2400},
+                                  orcmap::Point{3700, 3700}, orcmap::Point{2400, 3700}});
+  multi.geometry.paths.push_back({orcmap::Point{600, 600}, orcmap::Point{600, 1100},
+                                  orcmap::Point{1100, 1100}, orcmap::Point{1100, 600}});
+  tile.features.push_back(multi);
+
+  // A stroked line plus one at width 1.
+  orcmap::Feature thick;
+  thick.kind = orcmap::FeatureKind::kMotorway;
+  thick.kind_assigned = true;
+  thick.extent = 4096;
+  thick.geometry.type = orcmap::GeomType::kLineString;
+  thick.geometry.paths.push_back({orcmap::Point{0, 512}, orcmap::Point{1024, 900},
+                                  orcmap::Point{2048, 300}, orcmap::Point{4096, 1500}});
+  tile.features.push_back(thick);
+
+  orcmap::Feature thin;
+  thin.kind = orcmap::FeatureKind::kMinorRoad;
+  thin.kind_assigned = true;
+  thin.extent = 4096;
+  thin.geometry.type = orcmap::GeomType::kLineString;
+  thin.geometry.paths.push_back({orcmap::Point{100, 3000}, orcmap::Point{2000, 3400},
+                                 orcmap::Point{3900, 2900}});
+  tile.features.push_back(thin);
+
+  // A point feature, so the kPoint path is covered too.
+  orcmap::Feature poi;
+  poi.kind = orcmap::FeatureKind::kAirport;
+  poi.kind_assigned = true;
+  poi.extent = 4096;
+  poi.geometry.type = orcmap::GeomType::kPoint;
+  poi.geometry.paths.push_back({orcmap::Point{3000, 800}});
+  tile.features.push_back(poi);
+
+  // A feature the style hides must be skipped by both paths.
+  orcmap::Feature park = MakePoly(
+      orcmap::FeatureKind::kPark, true,
+      {orcmap::Point{0, 2000}, orcmap::Point{500, 2000}, orcmap::Point{500, 3000},
+       orcmap::Point{0, 3000}});
+  tile.features.push_back(park);
+
+  orcmap::TilePlacement placement;
+  placement.tile = orcmap::TileId{0, 0, 0};
+  placement.unwrapped_x = 0;
+
+  orcmap::host::FramebufferTarget direct(64, 64);
+  orcmap::host::FramebufferTarget cached(64, 64);
+  ORCMAP_EXPECT_TRUE(orcmap::ClearMapBackground(vp, style, &direct));
+  ORCMAP_EXPECT_TRUE(orcmap::ClearMapBackground(vp, style, &cached));
+
+  orcmap::TileScreenMap map;
+  ORCMAP_EXPECT_TRUE(
+      orcmap::MakeTilePlacementScreenMap(vp, placement, 4096, &map));
+
+  orcmap::RenderScratch scratch;
+  orcmap::ScreenFeature screen;
+  for (const orcmap::Feature& feature : tile.features) {
+    ORCMAP_EXPECT_TRUE(
+        orcmap::RenderFeatureAt(feature, placement, vp, style, &direct, &scratch));
+    if (orcmap::ProjectFeatureToScreen(feature, map, vp, style, &screen)) {
+      orcmap::DrawScreenFeature(screen, &cached);
+    }
+  }
+
+  int differing = 0;
+  for (int y = 0; y < 64; ++y) {
+    for (int x = 0; x < 64; ++x) {
+      if (direct.At(x, y) != cached.At(x, y)) ++differing;
+    }
+  }
+  ORCMAP_EXPECT_TRUE(differing == 0);
+}
+
 }  // namespace
 
 void RunRenderTests(const std::string& mvt_fixture_path) {
@@ -409,5 +501,6 @@ void RunRenderTests(const std::string& mvt_fixture_path) {
   TestPolygonWindingConventionDoesNotMatter();
   TestPointAndLineString(orcmap::styles::OrcSdrDark());
   TestRenderScratchMatchesFreshScratch();
+  TestScreenFeatureMatchesDirectRender();
   TestTinyMvtPipelineExperimentalClassifier(mvt_fixture_path);
 }

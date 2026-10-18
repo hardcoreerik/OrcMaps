@@ -27,18 +27,28 @@ void DrawPointMapped(RenderTarget* target, const TileScreenMap& map,
   target->DrawPoint(sx, sy, color);
 }
 
-void RenderOneFeature(const Feature& feature, const TileScreenMap& map,
-                      const Viewport& viewport, const MapStyle& style,
-                      RenderTarget* target, std::vector<int>* poly_xy) {
-  if (!feature.kind_assigned) return;
+// The skip rules and style lookup shared by both draw paths, so a feature is
+// never drawn by one and skipped by the other.
+bool ResolveDrawablePaint(const Feature& feature, const Viewport& viewport,
+                          const MapStyle& style, MapPaint* out) {
+  if (!feature.kind_assigned) return false;
   if (feature.kind == FeatureKind::kLabelPrimary ||
       feature.kind == FeatureKind::kLabelSecondary ||
       feature.kind == FeatureKind::kLabelMuted) {
-    return;
+    return false;
   }
   const MapPaint paint =
       ResolveFeatureStyle(feature.kind, viewport.zoom, style);
-  if (!paint.visible) return;
+  if (!paint.visible) return false;
+  *out = paint;
+  return true;
+}
+
+void RenderOneFeature(const Feature& feature, const TileScreenMap& map,
+                      const Viewport& viewport, const MapStyle& style,
+                      RenderTarget* target, std::vector<int>* poly_xy) {
+  MapPaint paint;
+  if (!ResolveDrawablePaint(feature, viewport, style, &paint)) return;
 
   switch (feature.geometry.type) {
     case GeomType::kPoint:
@@ -174,6 +184,126 @@ bool ClearMapBackground(const Viewport& viewport, const MapStyle& style,
     target->FillRect(0, 0, target->Width(), target->Height(), background.color);
   }
   return true;
+}
+
+bool ProjectFeatureToScreen(const Feature& feature, const TileScreenMap& map,
+                            const Viewport& viewport, const MapStyle& style,
+                            ScreenFeature* out) {
+  if (out == nullptr) return false;
+  MapPaint paint;
+  if (!ResolveDrawablePaint(feature, viewport, style, &paint)) return false;
+
+  out->xy.clear();
+  out->path_counts.clear();
+  out->ring_sign.clear();
+  out->type = feature.geometry.type;
+  out->color = paint.color;
+  out->width_px = paint.width_px;
+
+  const bool is_polygon = out->type == GeomType::kPolygon;
+  const bool is_line = out->type == GeomType::kLineString;
+  size_t kept = 0;
+  for (const Path& path : feature.geometry.paths) {
+    if (is_polygon && path.size() < 3) continue;
+    if (is_line && path.size() < 2) continue;
+    if (!is_polygon && !is_line && path.empty()) continue;
+    const size_t first = out->xy.size();
+    for (const Point& p : path) {
+      int sx = 0;
+      int sy = 0;
+      ProjectLocal(map, p.x, p.y, &sx, &sy);
+      out->xy.push_back(sx);
+      out->xy.push_back(sy);
+    }
+    out->path_counts.push_back(path.size());
+    if (is_polygon) {
+      const int64_t area = SignedArea2(out->xy.data() + first, path.size());
+      out->ring_sign.push_back(area > 0 ? 1 : (area < 0 ? -1 : 0));
+    }
+    ++kept;
+  }
+  if (kept == 0) return false;
+
+  int64_t min_x = out->xy[0];
+  int64_t max_x = out->xy[0];
+  int64_t min_y = out->xy[1];
+  int64_t max_y = out->xy[1];
+  for (size_t i = 0; i * 2 + 1 < out->xy.size(); ++i) {
+    const int64_t x = out->xy[i * 2];
+    const int64_t y = out->xy[i * 2 + 1];
+    if (x < min_x) min_x = x;
+    if (x > max_x) max_x = x;
+    if (y < min_y) min_y = y;
+    if (y > max_y) max_y = y;
+  }
+  out->min_x = min_x;
+  out->max_x = max_x;
+  out->min_y = min_y;
+  out->max_y = max_y;
+  return true;
+}
+
+void DrawScreenFeature(const ScreenFeature& feature, RenderTarget* target) {
+  if (target == nullptr || feature.path_counts.empty()) return;
+  switch (feature.type) {
+    case GeomType::kPoint: {
+      size_t v = 0;
+      for (const size_t count : feature.path_counts) {
+        for (size_t i = 0; i < count; ++i) {
+          target->DrawPoint(feature.xy[v + i * 2], feature.xy[v + i * 2 + 1],
+                            feature.color);
+        }
+        v += count * 2;
+      }
+      break;
+    }
+    case GeomType::kLineString: {
+      size_t v = 0;
+      for (const size_t count : feature.path_counts) {
+        for (size_t i = 1; i < count; ++i) {
+          target->DrawLine(feature.xy[v + (i - 1) * 2],
+                           feature.xy[v + (i - 1) * 2 + 1],
+                           feature.xy[v + i * 2], feature.xy[v + i * 2 + 1],
+                           feature.color, feature.width_px);
+        }
+        v += count * 2;
+      }
+      break;
+    }
+    case GeomType::kPolygon: {
+      // Same grouping rule as the streaming path: a ring winding like the
+      // first starts a new exterior part, the opposite winding is a hole in
+      // the current part, and a degenerate ring stays with the current part.
+      int8_t exterior_sign = 0;
+      size_t vertex = 0;
+      size_t part_ring = 0;
+      size_t part_vertex = 0;
+      size_t part_rings = 0;
+      for (size_t r = 0; r < feature.ring_sign.size(); ++r) {
+        const int8_t sign = feature.ring_sign[r];
+        if (exterior_sign == 0) exterior_sign = sign;
+        const bool new_exterior = sign != 0 && sign == exterior_sign;
+        if (new_exterior && part_rings > 0) {
+          target->FillPolygonRings(feature.xy.data() + part_vertex * 2,
+                                   feature.path_counts.data() + part_ring,
+                                   part_rings, feature.color);
+          part_ring = r;
+          part_vertex = vertex;
+          part_rings = 0;
+        }
+        ++part_rings;
+        vertex += feature.path_counts[r];
+      }
+      if (part_rings > 0) {
+        target->FillPolygonRings(feature.xy.data() + part_vertex * 2,
+                                 feature.path_counts.data() + part_ring,
+                                 part_rings, feature.color);
+      }
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 bool RenderFeatureTile(const FeatureTile& features, TileId source_tile,

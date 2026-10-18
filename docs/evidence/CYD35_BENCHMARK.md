@@ -4,6 +4,12 @@
 PSRAM**, using the same three packs as the Tab5's card, so the two boards are
 directly comparable on identical data.
 
+> The MCU row below records 160 MHz because that was the ESP-IDF default in
+> force at the time of this run. From 0.3.0 the board is configured for
+> 240 MHz, and the follow-up investigation into what limits a frame — and why
+> 30 fps is not reachable on this panel — is in
+> [2026-10-18-cyd-frame-rate.md](2026-10-18-cyd-frame-rate.md).
+
 ## Board
 
 | | |

@@ -19,6 +19,7 @@
 // contend.
 
 #include <LovyanGFX.hpp>
+#include <lgfx/v1/touch/Touch_XPT2046.hpp>
 
 #include "orcmap/compression.hpp"
 #include "orcmap/esp_idf/file_byte_source.hpp"
@@ -44,6 +45,7 @@
 #include <esp_vfs_fat.h>
 #include <sdmmc_cmd.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -179,6 +181,12 @@ class Cyd35Display : public lgfx::LGFX_Device {
     setPanel(&panel_);
   }
 
+  // Runtime SPI write-clock change. Bus_SPI::setClock only invalidates the
+  // cached divider, so the next transaction programs a new SPI_CLOCK_REG and
+  // no bus re-initialisation is needed.
+  void SetWriteClock(uint32_t hz) { bus_.setClock(hz); }
+  uint32_t WriteClock() const { return bus_.getClock(); }
+
  private:
   lgfx::Bus_SPI bus_;
   lgfx::Panel_ST7796 panel_;
@@ -187,6 +195,107 @@ class Cyd35Display : public lgfx::LGFX_Device {
 
 Cyd35Display g_display;
 sdmmc_card_t* g_card = nullptr;
+
+// ---------------------------------------------------------------------------
+// Touch (XPT2046)
+// ---------------------------------------------------------------------------
+//
+// The resistive controller shares the panel's SPI bus (same SCLK/MOSI/MISO)
+// and has its own chip select, which is why the panel config above sets
+// bus_shared. It is polled between frames, never during one: a touch read
+// takes the bus, and a frame holds it for tens of milliseconds.
+//
+// Chip select and axis mapping are verified on the board (CYD 3.5",
+// ESP32-D0WD-V3) with -DORCMAP_CYD_TOUCH_DEBUG=1: CS 33 answers and a
+// corner-to-corner drag reported raw x 790..3578, raw y 502..3673. Those
+// observed extremes are narrower than the kTouchRawMin/Max bounds below, so
+// the outer few percent of the panel is a dead margin and the drag gain runs a
+// few percent low; a drag absorbs that, and the map still reaches every edge.
+// Re-run the debug build and re-derive these if a replacement board feels
+// offset or mirrored.
+constexpr int kTouchCs = 33;
+// Polled, not interrupt-driven: the XPT2046 IRQ line has no guaranteed
+// pull-up on this board family, and a floating IRQ pin reads as "always
+// pressed" or "never pressed" depending on the revision. The controller
+// already filters inconsistent samples, so polling costs one ~230 us SPI
+// read per idle tick and needs no extra wiring assumption.
+constexpr int kTouchIrq = -1;
+constexpr int kTouchRawMin = 300;
+constexpr int kTouchRawMax = 3900;
+// Measured on the board via ORCMAP_CYD_TOUCH_DEBUG. The controller's X axis
+// runs down the screen and its Y axis runs right-to-left, so the axes are
+// swapped and the resulting screen X is inverted. Before this was corrected a
+// top-left-to-bottom-right drag reported screen (448,290) at the end, i.e. the
+// finger's horizontal motion moved the reported point leftwards.
+constexpr bool kTouchSwapAxes = true;
+constexpr bool kTouchInvertX = true;
+constexpr bool kTouchInvertY = false;
+
+class TouchPad {
+ public:
+  bool Init() {
+    auto cfg = touch_.config();
+    cfg.spi_host = SPI2_HOST;  // the panel's bus, shared by design
+    cfg.freq = 2000000;
+    cfg.bus_shared = true;
+    cfg.pin_sclk = kTftSclk;
+    cfg.pin_mosi = kTftMosi;
+    cfg.pin_miso = kTftMiso;
+    cfg.pin_cs = kTouchCs;
+    cfg.pin_int = kTouchIrq;
+    cfg.offset_rotation = kDisplayRotation;
+    cfg.x_min = kTouchRawMin;
+    cfg.x_max = kTouchRawMax;
+    cfg.y_min = kTouchRawMin;
+    cfg.y_max = kTouchRawMax;
+    touch_.config(cfg);
+    ready_ = touch_.init();
+    return ready_;
+  }
+
+  // True while a finger is down; writes screen pixels into *x / *y.
+  bool Read(int* x, int* y) {
+    if (!ready_ || touch_.getTouchRaw(&tp_, 1) == 0) return false;
+    // getTouchRaw reports the ADC, not pixels: the scaling and the axis swap
+    // that LGFXBase::getTouch would do are applied here so the mapping is
+    // visible and adjustable in one place.
+    int ax = tp_.x;
+    int ay = tp_.y;
+    if (kTouchSwapAxes) {
+      const int t = ax;
+      ax = ay;
+      ay = t;
+    }
+    const int sx = MapAxis(ax, kDisplayW, kTouchInvertX);
+    const int sy = MapAxis(ay, kDisplayH, kTouchInvertY);
+    *x = sx;
+    *y = sy;
+#ifdef ORCMAP_CYD_TOUCH_DEBUG
+    ESP_LOGI("orcmap_touch", "raw %d,%d -> screen %d,%d", tp_.x, tp_.y, sx, sy);
+#endif
+    return true;
+  }
+
+ private:
+  static int MapAxis(int raw, int extent, bool invert) {
+    if (extent <= 1 || kTouchRawMax <= kTouchRawMin) return 0;
+    int64_t scaled = static_cast<int64_t>(raw - kTouchRawMin) * (extent - 1);
+    scaled /= (kTouchRawMax - kTouchRawMin);
+    int v = static_cast<int>(scaled);
+    if (v < 0) v = 0;
+    if (v > extent - 1) v = extent - 1;
+    return invert ? (extent - 1 - v) : v;
+  }
+
+  lgfx::Touch_XPT2046 touch_;
+  lgfx::touch_point_t tp_{};
+  bool ready_ = false;
+};
+
+// How long the finger must rest on the panel before the frame under it is
+// upgraded from the drag style to the full one.
+constexpr int64_t kSettleUs = 300000;
+
 
 int64_t NowUs() { return esp_timer_get_time(); }
 
@@ -468,15 +577,23 @@ bool FocusPack(const orcmap::PackManifest& manifest) {
 // One measured frame, drawn straight to the panel. There is no offscreen
 // canvas on this board, so render_ms includes SPI transfer to the display --
 // stated plainly rather than hidden, because it is the real cost here.
-void RenderFrame() {
+void DrawNoCoverage() {
+  g_display.fillScreen(TFT_BLACK);
+  g_display.setTextDatum(middle_center);
+  g_display.setTextSize(1);
+  g_display.setTextColor(TFT_ORANGE, TFT_BLACK);
+  g_display.drawString("NO COVERAGE AT THIS VIEW", kDisplayW / 2,
+                       kDisplayH / 2);
+}
+
+// One measured frame with an explicit style and layer policy. RenderFrame()
+// below is this with the production style; a drag uses the same function with
+// a reduced one.
+void RenderFrameWith(const orcmap::MapStyle& style,
+                     const orcmap_bench::BenchPipelineOptions& options) {
   ResolveActiveSource();
   if (g_no_coverage || g_active.reader == nullptr) {
-    g_display.fillScreen(TFT_BLACK);
-    g_display.setTextDatum(middle_center);
-    g_display.setTextSize(1);
-    g_display.setTextColor(TFT_ORANGE, TFT_BLACK);
-    g_display.drawString("NO COVERAGE AT THIS VIEW", kDisplayW / 2,
-                         kDisplayH / 2);
+    DrawNoCoverage();
     // No pipeline ran, so there is no measurement to report.
     g_last_frame = orcmap_bench::BenchFrame{};
     return;
@@ -498,10 +615,772 @@ void RenderFrame() {
   // primitive manages its own transaction than when one is held open across
   // thousands of small writes. Reverted, and recorded so it is not
   // "optimised" again on intuition.
-  orcmap_bench::RenderMeasuredFrame(*g_active.reader, map_vp, *g_style, &target,
-                                    MakePipelineOptions(), MakeHooks(),
+  orcmap_bench::RenderMeasuredFrame(*g_active.reader, map_vp, style, &target,
+                                    options, MakeHooks(),
                                     /*background=*/true, &g_last_frame);
 }
+
+void RenderFrame() { RenderFrameWith(*g_style, MakePipelineOptions()); }
+
+// ---------------------------------------------------------------------------
+// Interactive drag (ORCMAP_CYD_INTERACTIVE)
+// ---------------------------------------------------------------------------
+
+#ifdef ORCMAP_CYD_INTERACTIVE
+
+// The style used while a finger is moving. It withholds the categories that
+// cost the most per screen -- minor and secondary roads, rail, buildings,
+// parks, boundaries -- and keeps the background, land, water and the
+// motorway/primary network, which is what makes a moving map still readable.
+// The full OrcSdrDark frame is drawn as soon as the finger stops.
+const orcmap::MapStyle& DragStyle() {
+  static const orcmap::MapStyle style = [] {
+    orcmap::MapStyle drag = orcmap::styles::OrcSdrDark();
+    using K = orcmap::FeatureKind;
+    const K hidden[] = {K::kMinorRoad,     K::kSecondaryRoad, K::kRail,
+                        K::kBuilding,      K::kPark,          K::kBoundary,
+                        K::kLabelPrimary,  K::kLabelSecondary, K::kLabelMuted};
+    for (K kind : hidden) {
+      drag.rules[static_cast<size_t>(kind)].visible = false;
+    }
+    drag.id = "orcsdr-dark-drag";
+    drag.display_name = "OrcSDR Dark (drag)";
+    return drag;
+  }();
+  return style;
+}
+
+// Decode-time companion to DragStyle(): the production layer filter plus the
+// building layer, which produces only a category the drag style hides.
+bool IncludeDragLayer(const char* name, size_t name_len, void* ctx) {
+  if (!orcmap::experimental::IncludeNoTextBasemapLayer(name, name_len, ctx)) {
+    return false;
+  }
+  return !(name_len == 8 && std::memcmp(name, "building", 8) == 0);
+}
+
+orcmap_bench::BenchPipelineOptions MakeDragPipelineOptions() {
+  orcmap_bench::BenchPipelineOptions options = MakePipelineOptions();
+  options.include_layer = &IncludeDragLayer;
+  return options;
+}
+
+void EmitInteractiveFrame(const char* phase) {
+  if (g_last_frame.tiles_visible == 0) return;
+  orcmap::Viewport map_vp = g_viewport;
+  map_vp.width_px = kDisplayW;
+  map_vp.height_px = kDisplayH;
+  orcmap_bench::EmitFrameRecord(
+      MakeHooks(), "interactive", phase,
+      g_active.manifest != nullptr ? g_active.manifest->pack_id.c_str() : "none",
+      g_style->id, map_vp, g_last_frame);
+}
+
+// One finger drags the map. There is no offscreen canvas on this board and
+// every frame goes straight to the panel, so the loop is sample -> pan ->
+// draw -> sample: the drag rate IS the frame rate, which is why the moving
+// frame uses the reduced style and the settled frame uses the real one.
+void RunInteractive(TouchPad& touch) {
+  int last_x = 0;
+  int last_y = 0;
+  bool was_down = false;
+  bool reduced_on_screen = false;
+  int64_t last_move_us = 0;
+
+  for (;;) {
+    int x = 0;
+    int y = 0;
+    const bool down = touch.Read(&x, &y);
+    const int64_t now = NowUs();
+
+    if (down && !was_down) {
+      last_x = x;
+      last_y = y;
+    } else if (down) {
+      const int dx = x - last_x;
+      const int dy = y - last_y;
+      if (dx != 0 || dy != 0) {
+        // Direct manipulation: the finger moves the map, so the camera moves
+        // the other way (docs/MAP_CONTROLS.md).
+        orcmap::PanByPixels(&g_viewport, -dx, -dy);
+        last_x = x;
+        last_y = y;
+        last_move_us = now;
+        RenderFrameWith(DragStyle(), MakeDragPipelineOptions());
+        reduced_on_screen = true;
+      }
+    } else if (was_down && reduced_on_screen) {
+      // Finger lifted: draw the frame the user actually looks at.
+      RenderFrame();
+      EmitInteractiveFrame("released");
+      reduced_on_screen = false;
+    }
+
+    // Resting finger: upgrade in place without waiting for the lift.
+    if (down && reduced_on_screen && now - last_move_us > kSettleUs) {
+      RenderFrame();
+      EmitInteractiveFrame("settled");
+      reduced_on_screen = false;
+    }
+
+    was_down = down;
+    vTaskDelay(pdMS_TO_TICKS(down ? 1 : 10));
+  }
+}
+
+// No packs on the card (or no card) but the touch wiring still needs
+// confirming. This is the only way to verify kTouchCs and the axis mapping
+// without a map, so it runs instead of failing hard: every touch draws a dot
+// where the code thinks the finger is, and ORCMAP_CYD_TOUCH_DEBUG prints the
+// raw and mapped values on serial.
+void RunTouchTest(TouchPad& touch) {
+  g_display.fillScreen(TFT_BLACK);
+  g_display.setTextDatum(top_left);
+  g_display.setTextSize(1);
+  g_display.setTextColor(TFT_WHITE, TFT_BLACK);
+  g_display.drawString("TOUCH TEST - no map packs found", 6, 6);
+  g_display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  g_display.drawString("Drag a finger; dots appear under it.", 6, 20);
+  g_display.drawString("Serial logs raw -> screen.", 6, 32);
+
+  for (;;) {
+    int x = 0;
+    int y = 0;
+    if (touch.Read(&x, &y)) {
+      g_display.fillCircle(x, y, 2, TFT_GREEN);
+    }
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+}
+
+#endif  // ORCMAP_CYD_INTERACTIVE
+
+// ---------------------------------------------------------------------------
+// FPS probe (ORCMAP_CYD_FPS_PROBE)
+// ---------------------------------------------------------------------------
+//
+// Answers one question with numbers: how far from 30 fps is this board, and is
+// the limit the CPU or the bus?
+//
+// Every frame here is kDisplayW x kDisplayH RGB565 = 307,200 bytes, and
+// Panel_ST7796 only speaks rgb565_2Byte or rgb888_3Byte, so bytes per frame is
+// fixed by the hardware. The achievable rate is then exactly
+//
+//     fps = SPI write throughput / 307,200
+//
+// which makes 30 fps require 9.22 MB/s, or 73.7 Mbit/s, of sustained pixels
+// out of an 80 MHz maximum SPI clock. That is the whole budget, so the probe
+// measures the real throughput at each candidate clock, the CPU cost of a
+// frame-shaped workload against a counting target that does no I/O, and
+// whether the panel read back what was written at that clock.
+#ifdef ORCMAP_CYD_FPS_PROBE
+
+constexpr size_t kFrameWireBytes =
+    static_cast<size_t>(kDisplayW) * static_cast<size_t>(kDisplayH) * 2;
+
+// Counts the primitives the panel would receive without touching the bus, so
+// the CPU half of a frame can be timed on its own.
+class CountingTarget : public orcmap::RenderTarget {
+ public:
+  int Width() const override { return kDisplayW; }
+  int Height() const override { return kDisplayH; }
+
+  void FillRect(int, int, int w, int h, orcmap::Color) override {
+    ++rects;
+    if (w > 0 && h > 0) span_px += static_cast<uint64_t>(w) * h;
+  }
+  void DrawPoint(int, int, orcmap::Color) override { ++points; }
+  void DrawLine(int x0, int y0, int x1, int y1, orcmap::Color,
+                float) override {
+    ++lines;
+    const int dx = x0 > x1 ? x0 - x1 : x1 - x0;
+    const int dy = y0 > y1 ? y0 - y1 : y1 - y0;
+    span_px += static_cast<uint64_t>((dx > dy ? dx : dy) + 1);
+  }
+  void FillPolygon(const int* xy, size_t n, orcmap::Color c) override {
+    FillPolygonRings(xy, &n, 1, c);
+  }
+  void FillPolygonRings(const int* xy, const size_t* counts, size_t rings,
+                        orcmap::Color) override {
+    ++polygons;
+    size_t total = 0;
+    for (size_t r = 0; r < rings; ++r) total += counts[r];
+    if (total < 3) return;
+    int minx = xy[0], maxx = xy[0], miny = xy[1], maxy = xy[1];
+    for (size_t i = 1; i < total; ++i) {
+      const int px = xy[i * 2];
+      const int py = xy[i * 2 + 1];
+      if (px < minx) minx = px;
+      if (px > maxx) maxx = px;
+      if (py < miny) miny = py;
+      if (py > maxy) maxy = py;
+    }
+    // Bounding box, an upper bound on the filled area.
+    span_px += static_cast<uint64_t>(maxx - minx + 1) *
+               static_cast<uint64_t>(maxy - miny + 1);
+  }
+
+  uint32_t rects = 0;
+  uint32_t points = 0;
+  uint32_t lines = 0;
+  uint32_t polygons = 0;
+  uint64_t span_px = 0;
+};
+
+uint32_t NextRand(uint32_t* state) {
+  *state = (*state * 1664525u) + 1013904223u;
+  return *state >> 8;
+}
+
+// A frame-shaped workload rather than real tiles: the CPU half has to be
+// measurable with no card inserted, and its cost depends on how many vertices
+// and spans the renderer walks, not on which pack they came from. The counts
+// default to the busy tile measured in docs/evidence/CYD35_BENCHMARK.md
+// (202 features), so the number here is comparable to the device figures.
+orcmap::FeatureTile BuildProbeTile(int polygon_count, int road_count) {
+  // cos/sin of 30-degree steps, x1000: a 12-gon without pulling in libm.
+  static const int16_t kUnit[12][2] = {
+      {1000, 0},   {866, 500},   {500, 866},   {0, 1000},  {-500, 866},
+      {-866, 500}, {-1000, 0},   {-866, -500}, {-500, -866}, {0, -1000},
+      {500, -866}, {866, -500}};
+  // Categories the default style actually fills and strokes at street zoom;
+  // an unassigned Feature is skipped outright by RenderOneFeature.
+  static const orcmap::FeatureKind kAreaKinds[3] = {
+      orcmap::FeatureKind::kWater, orcmap::FeatureKind::kPark,
+      orcmap::FeatureKind::kLand};
+  static const orcmap::FeatureKind kLineKinds[4] = {
+      orcmap::FeatureKind::kMotorway, orcmap::FeatureKind::kPrimaryRoad,
+      orcmap::FeatureKind::kSecondaryRoad, orcmap::FeatureKind::kMinorRoad};
+  uint32_t seed = 0x5EED1234u;
+
+  orcmap::FeatureTile tile;
+  tile.features.reserve(static_cast<size_t>(polygon_count + road_count));
+
+  for (int f = 0; f < polygon_count; ++f) {
+    orcmap::Feature feature;
+    feature.geometry.type = orcmap::GeomType::kPolygon;
+    feature.extent = 4096;
+    feature.kind = kAreaKinds[f % 3];
+    feature.kind_assigned = true;
+    const int cx = static_cast<int>(NextRand(&seed) % 4096u);
+    const int cy = static_cast<int>(NextRand(&seed) % 4096u);
+    const int rx = 80 + static_cast<int>(NextRand(&seed) % 500u);
+    const int ry = 80 + static_cast<int>(NextRand(&seed) % 500u);
+    orcmap::Path ring;
+    ring.reserve(12);
+    for (int i = 0; i < 12; ++i) {
+      orcmap::Point p;
+      p.x = cx + (kUnit[i][0] * rx) / 1000;
+      p.y = cy + (kUnit[i][1] * ry) / 1000;
+      ring.push_back(p);
+    }
+    feature.geometry.paths.push_back(std::move(ring));
+    tile.features.push_back(std::move(feature));
+  }
+
+  for (int f = 0; f < road_count; ++f) {
+    orcmap::Feature feature;
+    feature.geometry.type = orcmap::GeomType::kLineString;
+    feature.extent = 4096;
+    feature.kind = kLineKinds[f % 4];
+    feature.kind_assigned = true;
+    orcmap::Path line;
+    line.reserve(10);
+    int x = static_cast<int>(NextRand(&seed) % 4096u);
+    int y = static_cast<int>(NextRand(&seed) % 4096u);
+    for (int i = 0; i < 10; ++i) {
+      orcmap::Point p;
+      p.x = x;
+      p.y = y;
+      line.push_back(p);
+      x += static_cast<int>(NextRand(&seed) % 401u) - 200;
+      y += static_cast<int>(NextRand(&seed) % 401u) - 200;
+    }
+    feature.geometry.paths.push_back(std::move(line));
+    tile.features.push_back(std::move(feature));
+  }
+  return tile;
+}
+
+// Writes into one horizontal band of RAM instead of the panel. Every primitive
+// is clipped to the band, so the same pre-projected frame can be painted once
+// per band and the panel then receives one bulk pushImage per band -- the
+// difference between an SPI transaction per pixel and one per band.
+class BandTarget : public orcmap::RenderTarget {
+ public:
+  BandTarget(int band_top, int band_rows, uint16_t* pixels)
+      : top_(band_top), rows_(band_rows), px_(pixels) {}
+
+  int Width() const override { return kDisplayW; }
+  int Height() const override { return kDisplayH; }
+
+  void Clear(uint16_t color) {
+    // 32 bits per store: clearing is 307,200 bytes a frame, which was ~8 ms of
+    // the banded frame when it was a 16-bit loop.
+    const uint32_t pair = (static_cast<uint32_t>(color) << 16) | color;
+    uint32_t* p = reinterpret_cast<uint32_t*>(px_);
+    const size_t n = (static_cast<size_t>(kDisplayW) * rows_) / 2;
+    for (size_t i = 0; i < n; ++i) p[i] = pair;
+  }
+
+  void FillRect(int x, int y, int w, int h, orcmap::Color color) override {
+    if (w <= 0 || h <= 0) return;
+    int64_t x0 = x < 0 ? 0 : x;
+    int64_t y0 = y < top_ ? top_ : y;
+    int64_t x1 = static_cast<int64_t>(x) + w;
+    int64_t y1 = static_cast<int64_t>(y) + h;
+    if (x1 > kDisplayW) x1 = kDisplayW;
+    if (y1 > top_ + rows_) y1 = top_ + rows_;
+    if (x0 >= x1 || y0 >= y1) return;
+    const uint16_t v = orcmap::m5gfx_adapter::ToRgb565(color);
+    for (int64_t yy = y0; yy < y1; ++yy) {
+      uint16_t* row = px_ + static_cast<size_t>(yy - top_) * kDisplayW;
+      for (int64_t xx = x0; xx < x1; ++xx) row[xx] = v;
+    }
+  }
+
+  void DrawPoint(int x, int y, orcmap::Color color) override {
+    if (x < 0 || x >= kDisplayW || y < top_ || y >= top_ + rows_) return;
+    px_[static_cast<size_t>(y - top_) * kDisplayW + x] =
+        orcmap::m5gfx_adapter::ToRgb565(color);
+  }
+
+  // One Bresenham walk for every width, stamping a w x w brush per centreline
+  // pixel. That is exactly the pixel set the shared run-coalescing stroke
+  // produces (the union of brushes on consecutive pixels is the coalesced
+  // rect), but without a FillRect call per run -- measured as the largest
+  // single cost in the banded frame, because three quarters of the segments in
+  // a street-level view are wider than one pixel.
+  void DrawLine(int x0, int y0, int x1, int y1, orcmap::Color color,
+                float width_px) override {
+    const int w = orcmap::RasterStrokeWidthPx(width_px);
+    if (w <= 0) return;
+    const int r = w / 2;
+    const int xmin = -r;
+    const int ymin = top_ - r;
+    const int xmax = kDisplayW - 1 + r;
+    const int ymax = top_ + rows_ - 1 + r;
+    // Interior segments are the common case and the exact-rational clipper is
+    // expensive, so it only runs when a segment leaves the band.
+    const bool inside = x0 >= xmin && x1 >= xmin && x0 <= xmax && x1 <= xmax &&
+                        y0 >= ymin && y1 >= ymin && y0 <= ymax && y1 <= ymax;
+    if (!inside &&
+        !orcmap::ClipLineToPixelRect(&x0, &y0, &x1, &y1, xmin, ymin, xmax,
+                                     ymax)) {
+      return;
+    }
+    const uint16_t v = orcmap::m5gfx_adapter::ToRgb565(color);
+    const int dx = x1 > x0 ? x1 - x0 : x0 - x1;
+    const int sx = x0 < x1 ? 1 : -1;
+    const int ady = y1 > y0 ? y1 - y0 : y0 - y1;
+    const int dy = -ady;  // negative magnitude, canonical Bresenham
+    const int sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy;
+    for (;;) {
+      Stamp(x0 - r, y0 - r, w, v);
+      if (x0 == x1 && y0 == y1) break;
+      const int e2 = 2 * err;
+      if (e2 >= dy) {
+        err += dy;
+        x0 += sx;
+      }
+      if (e2 <= dx) {
+        err += dx;
+        y0 += sy;
+      }
+    }
+  }
+
+  void FillPolygon(const int* xy_pairs, size_t n_points,
+                   orcmap::Color color) override {
+    FillPolygonRings(xy_pairs, &n_points, 1, color);
+  }
+
+  // Even-odd scanline over every ring, clipped to the band's rows.
+  void FillPolygonRings(const int* xy_pairs, const size_t* ring_point_counts,
+                        size_t ring_count, orcmap::Color color) override {
+    if (xy_pairs == nullptr || ring_point_counts == nullptr || ring_count == 0) {
+      return;
+    }
+    size_t n_points = 0;
+    for (size_t r = 0; r < ring_count; ++r) n_points += ring_point_counts[r];
+    if (n_points < 3) return;
+
+    int min_y = xy_pairs[1];
+    int max_y = xy_pairs[1];
+    int min_x = xy_pairs[0];
+    int max_x = xy_pairs[0];
+    for (size_t i = 0; i < n_points; ++i) {
+      const int px = xy_pairs[i * 2];
+      const int py = xy_pairs[i * 2 + 1];
+      if (py < min_y) min_y = py;
+      if (py > max_y) max_y = py;
+      if (px < min_x) min_x = px;
+      if (px > max_x) max_x = px;
+    }
+    if (min_y < top_) min_y = top_;
+    if (max_y > top_ + rows_ - 1) max_y = top_ + rows_ - 1;
+    if (max_y < min_y || max_x < 0 || min_x >= kDisplayW) return;
+
+    const uint16_t v = orcmap::m5gfx_adapter::ToRgb565(color);
+    // One 16.16 division per EDGE instead of one integer division per
+    // (edge, row): the crossing x is linear in y, so it is advanced with a
+    // fixed-point step. The per-row division was the single largest cost in
+    // the banded frame.
+    edges_.clear();
+    {
+      size_t base = 0;
+      for (size_t r = 0; r < ring_count; ++r) {
+        const size_t ring_n = ring_point_counts[r];
+        if (ring_n >= 3) {
+          for (size_t i = 0; i < ring_n; ++i) {
+            const size_t j = (i + 1) % ring_n;
+            const int ya = xy_pairs[(base + i) * 2 + 1];
+            const int yb = xy_pairs[(base + j) * 2 + 1];
+            if (ya == yb) continue;
+            const int xa = xy_pairs[(base + i) * 2];
+            const int xb = xy_pairs[(base + j) * 2];
+            const bool up = ya < yb;
+            const int lo = up ? ya : yb;
+            const int hi = up ? yb : ya;
+            if (hi <= top_ || lo >= top_ + rows_) continue;
+            const int xlo = up ? xa : xb;
+            const int xhi = up ? xb : xa;
+            Edge e;
+            e.lo = lo;
+            e.hi = hi;
+            e.x_q16 = (static_cast<int64_t>(xlo) << 16);
+            e.step_q16 = (static_cast<int64_t>(xhi - xlo) << 16) / (hi - lo);
+            edges_.push_back(e);
+          }
+        }
+        base += ring_n;
+      }
+    }
+
+    for (int y = min_y; y <= max_y; ++y) {
+      crossings_.clear();
+      for (const Edge& e : edges_) {
+        if (y < e.lo || y >= e.hi) continue;
+        const int64_t x = e.x_q16 + static_cast<int64_t>(y - e.lo) * e.step_q16;
+        crossings_.push_back(static_cast<int>(x >> 16));
+      }
+      // Insertion sort: a scanline crosses a handful of edges, and std::sort's
+      // call overhead per scanline showed up in the banded frame time.
+      for (size_t a = 1; a < crossings_.size(); ++a) {
+        const int key = crossings_[a];
+        size_t b = a;
+        while (b > 0 && crossings_[b - 1] > key) {
+          crossings_[b] = crossings_[b - 1];
+          --b;
+        }
+        crossings_[b] = key;
+      }
+      uint16_t* row = px_ + static_cast<size_t>(y - top_) * kDisplayW;
+      for (size_t k = 0; k + 1 < crossings_.size(); k += 2) {
+        int xa = crossings_[k];
+        int xb = crossings_[k + 1];
+        if (xa < 0) xa = 0;
+        if (xb >= kDisplayW) xb = kDisplayW - 1;
+        for (int xx = xa; xx <= xb; ++xx) row[xx] = v;
+      }
+    }
+  }
+
+ private:
+  // One solid w x w block, clipped to the band. Deliberately not FillRect:
+  // this runs per centreline pixel and must not pay a full clip per brush.
+  void Stamp(int x, int y, int w, uint16_t v) {
+    int x0 = x;
+    int y0 = y;
+    int x1 = x + w;
+    int y1 = y + w;
+    if (x0 < 0) x0 = 0;
+    if (y0 < top_) y0 = top_;
+    if (x1 > kDisplayW) x1 = kDisplayW;
+    if (y1 > top_ + rows_) y1 = top_ + rows_;
+    if (x0 >= x1 || y0 >= y1) return;
+    for (int yy = y0; yy < y1; ++yy) {
+      uint16_t* row = px_ + static_cast<size_t>(yy - top_) * kDisplayW;
+      for (int xx = x0; xx < x1; ++xx) row[xx] = v;
+    }
+  }
+
+  struct Edge {
+    int lo = 0;
+    int hi = 0;
+    int64_t x_q16 = 0;
+    int64_t step_q16 = 0;
+  };
+
+  int top_;
+  int rows_;
+  uint16_t* px_;
+  std::vector<int> crossings_;
+  std::vector<Edge> edges_;
+};
+
+// The pre-projected frame, reused between frames so the screen-space cache
+// allocates once.
+std::vector<orcmap::ScreenFeature> g_screen_frame;
+size_t g_screen_count = 0;
+int64_t g_proj_us = 0;
+int64_t g_raster_us = 0;
+int64_t g_push_us = 0;
+
+// Paints one whole frame as bands: project once, then per band cull by bounds,
+// rasterize into RAM and hand the panel a single pushImage.
+int64_t RenderFrameBanded(const orcmap::FeatureTile& tile,
+                          const orcmap::TilePlacement& placement,
+                          const orcmap::Viewport& vp,
+                          const orcmap::MapStyle& style, uint16_t* band,
+                          int band_rows) {
+  orcmap::TileScreenMap map;
+  if (!orcmap::MakeTilePlacementScreenMap(vp, placement, 4096, &map)) return -1;
+
+  const int64_t t0 = NowUs();
+  // Never resize down: shrinking destroys the ScreenFeature vectors and frees
+  // the buffers this cache exists to reuse.
+  if (g_screen_frame.size() < tile.features.size()) {
+    g_screen_frame.resize(tile.features.size());
+  }
+  size_t keep = 0;
+  for (const orcmap::Feature& f : tile.features) {
+    if (orcmap::ProjectFeatureToScreen(f, map, vp, style,
+                                      &g_screen_frame[keep])) {
+      ++keep;
+    }
+  }
+  g_screen_count = keep;
+  const int64_t t_proj = NowUs();
+
+  const orcmap::MapPaint bg = orcmap::ResolveFeatureStyle(
+      orcmap::FeatureKind::kBackground, vp.zoom, style);
+  const uint16_t bg565 = orcmap::m5gfx_adapter::ToRgb565(bg.color);
+
+  for (int top = 0; top < kDisplayH; top += band_rows) {
+    BandTarget target(top, band_rows, band);
+    target.Clear(bg565);
+    for (size_t i = 0; i < g_screen_count; ++i) {
+      const orcmap::ScreenFeature& sf = g_screen_frame[i];
+      if (sf.max_y < top || sf.min_y >= top + band_rows) continue;
+      orcmap::DrawScreenFeature(sf, &target);
+    }
+    g_push_us -= NowUs();
+    g_display.pushImage(0, top, kDisplayW, band_rows, band);
+    g_push_us += NowUs();
+  }
+  const int64_t t_end = NowUs();
+  g_proj_us = t_proj - t0;
+  g_raster_us = (t_end - t_proj) - g_push_us;
+  return t_end - t0;
+}
+
+// Writes eight solid bands and reads one pixel back from each. A clock the
+// panel cannot keep up with shows up here as written != read before it shows
+// up as a visibly torn map.
+int VerifyBands(uint16_t* first_expected, uint16_t* first_got) {
+  static const uint16_t kColors[8] = {0xF800, 0x07E0, 0x001F, 0xFFFF,
+                                      0x0000, 0x7BEF, 0xF81F, 0x07FF};
+  const int band = kDisplayH / 8;
+  g_display.startWrite();
+  for (int i = 0; i < 8; ++i) {
+    g_display.fillRect(0, i * band, kDisplayW, band, kColors[i]);
+  }
+  g_display.endWrite();
+  int bad = 0;
+  for (int i = 0; i < 8; ++i) {
+    const uint16_t got = g_display.readPixel(kDisplayW / 2, i * band + band / 2);
+    if (got != kColors[i]) {
+      if (bad == 0) {
+        *first_expected = kColors[i];
+        *first_got = got;
+      }
+      ++bad;
+    }
+  }
+  return bad;
+}
+
+void RunFpsProbe() {
+  g_viewport.width_px = kDisplayW;
+  g_viewport.height_px = kDisplayH;
+  orcmap::SetZoom(&g_viewport, 14);
+  orcmap::SetCenter(&g_viewport, 44.0462, -123.0220);
+
+  const orcmap::TileId tile =
+      orcmap::LatLonToTile(44.0462, -123.0220, g_viewport.zoom);
+  orcmap::TilePlacement placement;
+  if (!orcmap::NearestTilePlacement(g_viewport, tile, &placement)) {
+    Fail("FPS PROBE CANNOT PLACE TILE", "viewport/tile mismatch");
+  }
+
+  const orcmap::MapStyle& style = orcmap::styles::OrcSdrDark();
+
+  // How the CPU half scales with what is on screen. The busy row matches the
+  // 202-feature tile recorded in docs/evidence/CYD35_BENCHMARK.md.
+  struct Density {
+    const char* name;
+    int polygons;
+    int roads;
+  };
+  static const Density kDensities[] = {
+      {"light", 10, 60},
+      {"busy", 30, 172},
+      {"dense", 80, 500},
+  };
+  for (const Density& d : kDensities) {
+    const orcmap::FeatureTile tile = BuildProbeTile(d.polygons, d.roads);
+    CountingTarget counting;
+    const int64_t t0 = NowUs();
+    {
+      orcmap::RenderScratch scratch;
+      for (const orcmap::Feature& f : tile.features) {
+        orcmap::RenderFeatureAt(f, placement, g_viewport, style, &counting,
+                                &scratch);
+      }
+    }
+    const int64_t cpu_us = NowUs() - t0;
+    ESP_LOGI(kTag,
+             "fps probe cpu %-5s: %u features, %u polys, %u lines, "
+             "%llu px span -> %.2f ms (no SPI)",
+             d.name, static_cast<unsigned>(tile.features.size()),
+             static_cast<unsigned>(counting.polygons),
+             static_cast<unsigned>(counting.lines),
+             static_cast<unsigned long long>(counting.span_px),
+             cpu_us / 1000.0);
+  }
+
+  const orcmap::FeatureTile busy = BuildProbeTile(30, 172);
+
+  // 80 MHz is the APB clock, so the reachable dividers are 80, 40, 26.67 and
+  // 20 MHz; asking for 60 MHz silently lands on 40.
+  const uint32_t clocks[] = {20000000u, 26666667u, 40000000u, 80000000u};
+  for (uint32_t hz : clocks) {
+    g_display.SetWriteClock(hz);
+
+    int64_t wire_best = 0x7FFFFFFFFFFFFFFFLL;
+    for (int i = 0; i < 3; ++i) {
+      const int64_t t0 = NowUs();
+      g_display.fillScreen(TFT_BLACK);
+      const int64_t dt = NowUs() - t0;
+      if (dt < wire_best) wire_best = dt;
+    }
+    const double wire_ms = wire_best / 1000.0;
+
+    uint16_t expected = 0;
+    uint16_t got = 0;
+    const int bad = VerifyBands(&expected, &got);
+
+    orcmap::m5gfx_adapter::DisplayTarget target(g_display);
+    int64_t total_us = 0;
+    {
+      orcmap::RenderScratch scratch;
+      const int64_t t0 = NowUs();
+      orcmap::ClearMapBackground(g_viewport, style, &target);
+      for (const orcmap::Feature& f : busy.features) {
+        orcmap::RenderFeatureAt(f, placement, g_viewport, style, &target,
+                                &scratch);
+      }
+      total_us = NowUs() - t0;
+    }
+    const double total_ms = total_us / 1000.0;
+
+    ESP_LOGI(kTag,
+             "fps probe clock=%uMHz wire=%.2fms (%.2fMB/s ceiling=%.1ffps) "
+             "frame=%.2fms (%.1ffps) readback_bad=%d",
+             static_cast<unsigned>(hz / 1000000u), wire_ms,
+             (kFrameWireBytes / 1048576.0) / (wire_ms / 1000.0),
+             1000.0 / wire_ms, total_ms, 1000.0 / total_ms, bad);
+    if (bad > 0) {
+      ESP_LOGW(kTag, "fps probe readback mismatch at %uMHz: expected 0x%04X got 0x%04X",
+               static_cast<unsigned>(hz / 1000000u), expected, got);
+    }
+  }
+
+  g_display.SetWriteClock(24000000u);
+
+  // Where the non-wire time goes: areas and lines are pushed through very
+  // different LovyanGFX paths (drawFastHLine runs vs per-pixel Bresenham), so
+  // measuring them apart says which one to attack.
+  g_display.SetWriteClock(80000000u);
+  const auto panel_ms = [&](int polys, int roads) {
+    const orcmap::FeatureTile t = BuildProbeTile(polys, roads);
+    orcmap::m5gfx_adapter::DisplayTarget target(g_display);
+    orcmap::RenderScratch scratch;
+    const int64_t t0 = NowUs();
+    orcmap::ClearMapBackground(g_viewport, style, &target);
+    for (const orcmap::Feature& f : t.features) {
+      orcmap::RenderFeatureAt(f, placement, g_viewport, style, &target,
+                              &scratch);
+    }
+    return (NowUs() - t0) / 1000.0;
+  };
+  ESP_LOGI(kTag,
+           "fps probe split @80MHz: areas_only=%.2f ms, lines_only=%.2f ms, "
+           "both=%.2f ms",
+           panel_ms(30, 0), panel_ms(0, 172), panel_ms(30, 172));
+
+  // Cost of showing a frame that was rasterized in RAM: N bulk pushes instead
+  // of one call per primitive. If this lands on the fillScreen time, banding
+  // reaches the bus floor and the only remaining cost is rasterization.
+  // Band height: 80 rows is 76,800 B, which leaves the streaming scratch and
+  // the feature buffer room on this ~129 KiB board and halves the number of
+  // push calls (each costs ~0.36 ms of bus turnaround).
+  constexpr int kBandRows = 80;
+  constexpr int kBands = kDisplayH / kBandRows;
+  auto* band = static_cast<uint16_t*>(
+      heap_caps_malloc(static_cast<size_t>(kDisplayW) * kBandRows * 2,
+                       kDataCaps));
+  if (band != nullptr) {
+    for (size_t i = 0; i < static_cast<size_t>(kDisplayW) * kBandRows; ++i) {
+      band[i] = 0x18E3;  // a land-ish fill, so the pixels are not all zero
+    }
+    int64_t best = 0x7FFFFFFFFFFFFFFFLL;
+    for (int rep = 0; rep < 3; ++rep) {
+      const int64_t t0 = NowUs();
+      for (int b = 0; b < kBands; ++b) {
+        g_display.pushImage(0, b * kBandRows, kDisplayW, kBandRows, band);
+      }
+      const int64_t dt = NowUs() - t0;
+      if (dt < best) best = dt;
+    }
+    ESP_LOGI(kTag,
+             "fps probe banding @80MHz: %d bands of %d rows, buffer %u B -> "
+             "%.2f ms/frame (%.1f fps)",
+             kBands, kBandRows,
+             static_cast<unsigned>(kDisplayW * kBandRows * 2), best / 1000.0,
+             1000000.0 / best);
+
+    // The whole thing: project once, rasterize every band in RAM, push it.
+    int64_t banded_best = 0x7FFFFFFFFFFFFFFFLL;
+    for (int rep = 0; rep < 3; ++rep) {
+      const orcmap::FeatureTile busy_tile = BuildProbeTile(30, 172);
+      const int64_t dt = RenderFrameBanded(busy_tile, placement, g_viewport,
+                                           style, band, kBandRows);
+      if (dt >= 0 && dt < banded_best) banded_best = dt;
+    }
+    if (banded_best != 0x7FFFFFFFFFFFFFFFLL) {
+      ESP_LOGI(kTag,
+               "fps probe banded frame @80MHz: %.2f ms/frame (%.1f fps) "
+               "[project + rasterize + push]",
+               banded_best / 1000.0, 1000000.0 / banded_best);
+      ESP_LOGI(kTag,
+               "fps probe banded phases: project=%.2f ms rasterize=%.2f ms "
+               "push=%.2f ms",
+               g_proj_us / 1000.0, g_raster_us / 1000.0, g_push_us / 1000.0);
+    }
+    heap_caps_free(band);
+  } else {
+    ESP_LOGW(kTag, "fps probe banding: no %u B for the band buffer",
+             static_cast<unsigned>(kDisplayW * kBandRows * 2));
+  }
+
+  g_display.SetWriteClock(24000000u);
+  Fail("FPS PROBE COMPLETE", "see serial log for the clock table");
+}
+
+#endif  // ORCMAP_CYD_FPS_PROBE
 
 // ---------------------------------------------------------------------------
 // Benchmarks
@@ -669,8 +1548,27 @@ extern "C" void app_main() {
                 static_cast<unsigned>(kMaxFeatureBytes / 1024));
   StatusLine(84, TFT_GREEN, line);
 
+#ifdef ORCMAP_CYD_FPS_PROBE
+  ESP_LOGI(kTag, "display %dx%d, configured write clock %uMHz", w, h,
+           static_cast<unsigned>(g_display.WriteClock() / 1000000u));
+  RunFpsProbe();
+#endif
+
   if (!MountSd()) {
+#ifdef ORCMAP_CYD_INTERACTIVE
+    // Interactive builds stay useful on a bare board: the touch pins and the
+    // axis mapping are the one thing in this file that is not hardware
+    // verified yet, and they can be checked without any map data.
+    ESP_LOGW(kTag, "no SD card: starting touch test instead of the map");
+    static TouchPad test_pad;
+    if (!test_pad.Init()) {
+      Fail("TOUCH CONTROLLER FAILED TO INIT",
+           "check kTouchCs in main.cpp");
+    }
+    RunTouchTest(test_pad);
+#else
     Fail("SD CARD NOT FOUND", "insert a card with /orcmaps");
+#endif
   }
   StatusLine(98, TFT_GREEN, "SD card  mounted");
 
@@ -746,6 +1644,19 @@ extern "C" void app_main() {
   }
   vTaskDelay(pdMS_TO_TICKS(800));
   RenderFrame();
+
+#ifdef ORCMAP_CYD_INTERACTIVE
+  EmitInteractiveFrame("boot");
+  // Interactive mode owns the loop: one finger drags the map, and the frame
+  // under the finger is upgraded to full quality when it stops moving.
+  ESP_LOGI(kTag, "interactive drag mode");
+  static TouchPad touch_pad;
+  if (!touch_pad.Init()) {
+    Fail("TOUCH CONTROLLER FAILED TO INIT",
+         "check kTouchCs / kTouchIrq in main.cpp");
+  }
+  RunInteractive(touch_pad);
+#endif
 
   // MEASUREMENT BUILDS ONLY run the scenario sequence. In a plain build it
   // made the device look broken: six frames (three packs, cold and warm)

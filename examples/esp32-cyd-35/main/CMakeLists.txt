@@ -25,3 +25,28 @@ endif()
 if(ORCMAP_CYD_SCENARIOS)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE ORCMAP_CYD_SCENARIOS=1)
 endif()
+
+# Interactive build: one finger drags the map. The frame under the finger is
+# drawn with a reduced style while it moves and upgraded to full quality when
+# it stops. This build owns the main loop and never runs the benchmark
+# scenarios.
+#   idf.py -DORCMAP_CYD_INTERACTIVE=1 build
+if(ORCMAP_CYD_INTERACTIVE)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ORCMAP_CYD_INTERACTIVE=1)
+endif()
+
+# Measure how far this board is from a target frame rate: sweeps the display
+# SPI write clock and reports bus throughput, CPU-only frame cost and a
+# read-back check per clock. Needs no SD card or pack.
+#   idf.py -DORCMAP_CYD_FPS_PROBE=1 build
+if(ORCMAP_CYD_FPS_PROBE)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ORCMAP_CYD_FPS_PROBE=1)
+endif()
+
+# Print every touch sample's raw ADC and mapped screen point on the serial
+# log. Use this once to confirm kTouchCs/kTouchIrq and the axis mapping in
+# main.cpp are right for the board in hand.
+#   idf.py -DORCMAP_CYD_INTERACTIVE=1 -DORCMAP_CYD_TOUCH_DEBUG=1 build
+if(ORCMAP_CYD_TOUCH_DEBUG)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ORCMAP_CYD_TOUCH_DEBUG=1)
+endif()

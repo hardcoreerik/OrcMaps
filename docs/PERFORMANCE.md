@@ -161,6 +161,28 @@ The effect on the device numbers above is **unmeasured**. Re-run the CYD
 report on the same three packs before quoting a multiplier; `render_ms` is
 the stage this change targets, `decode_ms` is not.
 
+## Where a CYD frame's time actually goes (0.3.0, device-measured)
+
+A 480x320 RGB565 frame is 307,200 bytes and `Panel_ST7796` only speaks
+`rgb565_2Byte` or `rgb888_3Byte`, so bytes per frame is fixed by the hardware.
+The fastest possible update is therefore one `fillScreen` at the highest SPI
+clock: **30.98 ms at 80 MHz, or 32.3 fps**. Measured on the board, and the
+panel read back exactly what was written at that clock.
+
+The interesting part is that the CPU was never what limited it. A whole
+202-feature frame costs ~2-3 ms of projection and clipping, while drawing it
+straight to the panel cost 285.65 ms -- because 1 px road strokes went through
+LovyanGFX `drawLine`, which issues a windowed SPI write per pixel: ~170 us per
+12-pixel segment, 94% of the frame. Rasterising into RAM and pushing one band
+at a time instead takes the same frame to **50.88 ms (19.7 fps)**, 5.6x faster.
+
+30 fps is not reachable on this panel: pushing an *empty* frame as four bands
+already costs 33.16 ms (30.2 fps), leaving nothing for drawing. Realistic
+target is ~25 fps.
+
+Full measurements, the per-step breakdown and the remaining work are in
+`docs/evidence/2026-10-18-cyd-frame-rate.md`.
+
 ## Still unmeasured
 
 LilyGO T-Display-S3 power-to-map and stage timings. Pan/zoom latency. Cache

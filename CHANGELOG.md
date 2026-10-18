@@ -5,6 +5,59 @@ OrcMaps follows semantic versioning with pre-1.0 discipline (see
 change, but only in a new minor version, and every such change is listed here.
 Consumers pin a release by its full commit SHA (`docs/ORCSDR_INTEGRATION.md`).
 
+## 0.3.0 - 2026-10-18
+
+Adds a second painting path that projects a feature once and then draws it any
+number of times, so a target can paint a frame in horizontal bands instead of
+one panel transaction per primitive. On the CYD 3.5" this takes a 202-feature
+map frame from 285.65 ms to 50.88 ms (3.5 -> 19.7 fps). The investigation,
+every measurement and the remaining work are in
+`docs/evidence/2026-10-18-cyd-frame-rate.md`.
+
+Rendered output is unaffected: the new path is pinned to be pixel-identical to
+`RenderFeatureAt` by a host test.
+
+### Added
+
+- `ScreenFeature`, `ProjectFeatureToScreen()` and `DrawScreenFeature()`
+  (`include/orcmap/renderer.hpp`): the result of every per-vertex projection,
+  the style lookup and the polygon-winding grouping for one feature, kept so
+  the same frame can be painted more than once without repeating them. Pass the
+  same `ScreenFeature` back in to reuse its buffers; after warm-up projection
+  does not allocate. Most useful for a target that cannot hold a whole
+  framebuffer and paints a band at a time, and for skipping features whose
+  screen bounds miss the band.
+- `examples/esp32-cyd-35`: an FPS probe build
+  (`-DORCMAP_CYD_FPS_PROBE=1`) that sweeps the display SPI write clock, times
+  the wire floor, times CPU-only rendering against a counting target, verifies
+  each clock by reading pixels back, and reports a banded frame broken into
+  projection, rasterisation and bus time. Needs no SD card or pack.
+- `examples/esp32-cyd-35`: `BandTarget` and the screen-space cache that paint a
+  frame band by band in RAM, so the panel receives one `pushImage` per band.
+- `Cyd35Display::SetWriteClock()` / `WriteClock()` for changing the display SPI
+  clock at runtime.
+
+### Changed
+
+- The skip rules and the style lookup are now one `ResolveDrawablePaint()`
+  helper shared by both draw paths, so a feature cannot be drawn by one and
+  skipped by the other.
+- The CYD example builds at 240 MHz instead of the ESP-IDF default 160 MHz.
+  Every CPU cost in a frame is on the critical path now that the display bus is
+  understood, and the chip is a 240 MHz part.
+
+### Notes
+
+- On this board the panel bus, not the CPU, sets the frame rate. A full
+  480x320 RGB565 frame is 307,200 bytes and `Panel_ST7796` only speaks
+  `rgb565_2Byte` or `rgb888_3Byte`, so bytes per frame is fixed and the fastest
+  possible update is one `fillScreen` at 80 MHz: 30.98 ms, 32.3 fps. Pushing an
+  empty frame as four bands already costs 33.16 ms, so 30 fps is beyond the
+  hardware, not merely unoptimised. The realistic target is ~25 fps.
+- `CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240` in `sdkconfig.defaults` only seeds a
+  new `sdkconfig`; an existing generated `sdkconfig` must be updated or
+  regenerated for a frequency change to take effect.
+
 ## 0.2.3 - 2026-10-17
 
 Combines the integer render path with the polygon-ring and streaming-cleanup
