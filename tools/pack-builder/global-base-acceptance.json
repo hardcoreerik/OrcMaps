@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "purpose": "Worldwide regional-base acceptance views; expected content is a requirement, not a statement that existing packs pass",
+  "regional_zooms": [5, 7, 8, 9],
+  "local_zoom": 12,
+  "required_regional_content": ["settlement names", "major roads", "water", "land cover", "state or province boundaries where present", "county-equivalent boundaries where present"],
+  "views": [
+    {"id": "eugene-springfield", "lat": 44.05, "lon": -123.02, "expected_places": ["Eugene", "Springfield"], "boundary_context": "Oregon and Lane County; inspect a viewport, not only its center tile", "checks": ["reference screenshot quality", "local pack transition"]},
+    {"id": "london", "lat": 51.51, "lon": -0.13, "expected_places": ["London"], "boundary_context": "Greater London and surrounding administrative divisions", "checks": ["dense labels", "road hierarchy"]},
+    {"id": "tokyo", "lat": 35.68, "lon": 139.69, "expected_places": ["Tokyo", "東京"], "place_matching": "localized alternatives, not all names simultaneously required", "boundary_context": "Tokyo prefectural and adjoining administrative boundaries", "checks": ["Japanese glyph or explicit supported localization", "dense labels", "coast"]},
+    {"id": "nairobi", "lat": -1.29, "lon": 36.82, "expected_places": ["Nairobi"], "boundary_context": "Nairobi and neighboring Kenyan counties", "checks": ["county hierarchy", "park", "dense to sparse transition"]},
+    {"id": "sao-paulo", "lat": -23.55, "lon": -46.63, "expected_places": ["São Paulo"], "boundary_context": "São Paulo state and municipal-equivalent divisions", "checks": ["diacritics", "dense labels", "South America"]},
+    {"id": "delhi", "lat": 28.61, "lon": 77.21, "expected_places": ["Delhi", "दिल्ली"], "place_matching": "localized alternatives, not all names simultaneously required", "boundary_context": "Delhi territory and adjoining states", "checks": ["Devanagari glyph or explicit supported localization", "South Asia"]},
+    {"id": "sydney", "lat": -33.87, "lon": 151.21, "expected_places": ["Sydney"], "boundary_context": "New South Wales and local administrative divisions", "checks": ["southern hemisphere", "coast", "parks"]},
+    {"id": "suva-antimeridian", "lat": -18.14, "lon": 178.44, "expected_places": ["Suva"], "boundary_context": "Fiji islands; test both sides of longitude 180", "checks": ["islands", "wrap seam", "sparse labels"]}
+  ],
+  "acceptance_limits": [
+    "Inspect the complete viewport and surrounding boundary tiles; a center tile without a boundary is not evidence of missing regional boundaries",
+    "Verify source data at each zoom before judging renderer output",
+    "A declared layer or archive zoom range is insufficient proof",
+    "Do not accept unsupported text as blank or replacement glyphs",
+    "Record source/archive hashes, schema identity and hardware results separately"
+  ]
+}

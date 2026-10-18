@@ -328,7 +328,8 @@ void PrintTileReport(uint8_t z, uint32_t x, uint32_t y, const TileStats& s) {
     auto sit = samples.find(kv.first);
     if (sit != samples.end()) {
       for (const char* interesting : {"class", "subclass", "brunnel", "name",
-                                      "ref", "kind", "type", "structure"}) {
+                                      "ref", "kind", "kind_detail", "admin_level",
+                                      "min_zoom", "type", "structure"}) {
         auto vit = sit->second.find(interesting);
         if (vit == sit->second.end() || vit->second.empty()) continue;
         std::printf("    %s:", interesting);
