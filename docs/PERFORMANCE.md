@@ -140,7 +140,7 @@ Visible 24 / present 20 / missing 4 unchanged. First busy tile kept 8
 layers / 202 features (was 12 layers / 2071). Internal heap after that
 MvtTile: ~140 KiB vs ~40 KiB. Render time unchanged.
 
-## Render CPU path: double precision removed (0.2.2, host-verified)
+## Render CPU path: double precision removed (0.2.3, host-verified)
 
 Evidence class: **host render + shipped-binary disassembly. NOT device-measured.**
 
@@ -151,7 +151,7 @@ shows `orcmap::ProjectLocal` making ~18 soft-float ROM calls per projected
 vertex, and `orcmap::ClipLineToPixelRect` making ~50 per segment including
 four `__divdf3`.
 
-0.2.2 replaces both with integer arithmetic: `ProjectLocal` is Q16.16
+0.2.3 replaces both with integer arithmetic: `ProjectLocal` is Q16.16
 (64-bit multiply + shift per axis) and the clipper keeps exact rationals.
 Rendered output is byte-identical — host render (synthetic 1280x720) and
 `pack-inspect preview` on Springfield z14/z15, world z2 and Oregon z7 — so

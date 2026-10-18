@@ -14,6 +14,6 @@ dependencies:
 direct_dependencies:
 - idf
 - lovyangfx
-manifest_hash: 8730d456399dac607880fd8ce179e1fae74144261426d55e9e0fb56c56999c3c
+manifest_hash: 50c05408f7d1c0f9aacf9842ccf6a9bb1ee20fa5d1bc4491b979c0fe308a2db9
 target: esp32
 version: 2.0.0

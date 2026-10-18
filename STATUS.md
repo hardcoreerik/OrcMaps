@@ -142,7 +142,7 @@ candidates). Neither is final. Do not finalize OpenMapTiles, Shortbread,
   — FeatureTile → ResolveFeatureStyle → Viewport → pixels, no M5GFX.
   Unclassified features skipped. Every ring of a polygon is filled even-odd,
   so multipolygon parts are all drawn and holes are subtracted.
-- Host test suite: **178 test functions, all passing**.
+- Host test suite: **179 test functions, all passing**.
 - `EnumerateVisibleTiles` (unique TileIds, X wrap, Y clamp).
   `TileScreenMap` uses shortest wrapped X delta. Overzoom still rejected.
 - `RenderTarget::DrawLine` takes `width_px` from `MapPaint`. Shared
@@ -269,11 +269,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Result as of this writing: `100% tests passed, 0 tests failed out of 1`
-<<<<<<< HEAD
-(one `ctest` entry, `orcmap_host_tests`, itself running 174 test functions
-=======
-(one `ctest` entry, `orcmap_host_tests`, itself running 176 test functions
->>>>>>> e3028c6 (Render the hot path in integer arithmetic, not soft double)
+(one `ctest` entry, `orcmap_host_tests`, itself running 179 test functions
 covering geo math, PMTiles, style, attribution, MVT, Feature/MVT
 translation, Viewport, clip, host render, compression, and experimental
 OpenMapTiles-like classification — see `ARCHITECTURE.md`
@@ -331,7 +327,7 @@ local-only today.
 
 ## Integration status
 
-Not integrated with OrcSDR. `idf_component.yml` declares version `0.2.2`
+Not integrated with OrcSDR. `idf_component.yml` declares version `0.2.3`
 (`v0.2.0` was the first tagged release; see `CHANGELOG.md`); the contract OrcSDR
 integrates against is `docs/ORCSDR_INTEGRATION.md`. The in-tree `examples/generic-esp32` consumes the
 component via `EXTRA_COMPONENT_DIRS` (local convenience, not the

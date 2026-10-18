@@ -4,7 +4,7 @@ repository: "https://github.com/hardcoreerik/orcmaps.git"
 documentation: "https://github.com/hardcoreerik/orcmaps/tree/main/docs"
 issues: "https://github.com/hardcoreerik/orcmaps/issues"
 license: "AGPL-3.0-only"
-version: "0.2.2"
+version: "0.2.3"
 
 # OrcMaps' portable core (src/core, src/tiles, src/storage, src/cache,
 # src/overlays) has no ESP-IDF dependency and is host-testable -- see
