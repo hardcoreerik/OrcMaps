@@ -22,6 +22,10 @@ Style ids: `orcsdr-dark`, `standard-light`, `high-contrast-field`,
 
 Classification defaults to `openmaptiles-3.16`. Pass
 `--schema orcmaps-overview-1` for Natural Earth overview packs.
+Pass `--schema protomaps-v4` for Protomaps v4 (kind/kind_detail); it is a
+distinct input profile, not an OpenMapTiles archive. Place labels are
+classified but text rendering is still pending. Profile support in this
+host tool does not establish OrcSDR device compatibility.
 
 Springfield / 97477 host preview (pack from `tools/pack-builder`):
 

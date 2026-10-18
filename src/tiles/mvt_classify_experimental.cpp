@@ -82,6 +82,73 @@ bool ClassifyLanduse(const Feature& feature, FeatureKind* kind) {
   return false;
 }
 
+// Protomaps v4 is Tilezen-derived; its kind/kind_detail fields are not
+// OpenMapTiles class/subclass. Keep this mapping explicitly profile-scoped.
+bool ClassifyProtomapsV4(const Feature& feature, FeatureKind* out) {
+  const char* raw = StringProp(feature, "kind");
+  if (raw == nullptr || *raw == '\0') return false;
+  const std::string_view kind(raw);
+  const char* raw_detail = StringProp(feature, "kind_detail");
+  const std::string_view detail(raw_detail == nullptr ? "" : raw_detail);
+  const auto geometry = feature.geometry.type;
+  if (feature.layer == "roads" && geometry == GeomType::kLineString) {
+    if (kind == "rail") *out = FeatureKind::kRail;
+    else if (kind == "aeroway") *out = FeatureKind::kAirport;
+    else if (kind == "highway") *out = FeatureKind::kMotorway;
+    else if (kind == "major_road") {
+      *out = detail == "secondary" || detail == "secondary_link" ||
+                     detail == "tertiary" || detail == "tertiary_link"
+                 ? FeatureKind::kSecondaryRoad : FeatureKind::kPrimaryRoad;
+    } else if (kind == "minor_road" || kind == "path") {
+      *out = FeatureKind::kMinorRoad;
+    } else return false;
+    return true;
+  }
+  if (feature.layer == "boundaries" && geometry == GeomType::kLineString) {
+    // Preserve kind and numeric kind_detail for later hierarchy styling.
+    *out = FeatureKind::kBoundary;
+    return true;
+  }
+  if (feature.layer == "water") {
+    if (geometry == GeomType::kPolygon || geometry == GeomType::kLineString) {
+      *out = FeatureKind::kWater;
+      return true;
+    }
+    if (geometry == GeomType::kPoint) {
+      *out = FeatureKind::kLabelMuted;
+      return true;
+    }
+    return false;
+  }
+  if (feature.layer == "places" && geometry == GeomType::kPoint) {
+    if (kind == "country" || kind == "region" || kind == "locality") {
+      *out = detail == "village" || detail == "hamlet" ||
+                     detail == "isolated_dwelling"
+                 ? FeatureKind::kLabelSecondary : FeatureKind::kLabelPrimary;
+      return true;
+    }
+    return false;
+  }
+  if (geometry != GeomType::kPolygon) return false;
+  if (feature.layer == "earth" && kind == "earth") {
+    *out = FeatureKind::kLand;
+    return true;
+  }
+  if (feature.layer == "landcover" || feature.layer == "landuse") {
+    const bool green = kind == "forest" || kind == "wood" || kind == "park" ||
+                       kind == "national_park" || kind == "nature_reserve" ||
+                       kind == "protected_area" || kind == "recreation_ground" ||
+                       kind == "garden" || kind == "golf_course";
+    *out = green ? FeatureKind::kPark : FeatureKind::kLand;
+    return true;
+  }
+  if (feature.layer == "buildings" && kind == "building") {
+    *out = FeatureKind::kBuilding;
+    return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 bool TryClassifyFeature(const Feature& feature, FeatureKind* kind) {
@@ -157,6 +224,16 @@ bool AssignFeatureKindsForProfile(std::string_view schema_version,
                                   FeatureTile* tile) {
   if (tile == nullptr) return false;
   if (schema_version == "openmaptiles-3.16") return AssignFeatureKinds(tile);
+  if (schema_version == "protomaps-v4") {
+    for (Feature& feature : tile->features) {
+      FeatureKind kind;
+      if (ClassifyProtomapsV4(feature, &kind)) {
+        feature.kind = kind;
+        feature.kind_assigned = true;
+      }
+    }
+    return true;
+  }
   if (schema_version != "orcmaps-overview-1") return false;
   for (Feature& feature : tile->features) {
     FeatureKind kind;
