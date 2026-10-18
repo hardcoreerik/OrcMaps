@@ -1,0 +1,29 @@
+{
+  "id": "protomaps-basemap-v4",
+  "name": "Protomaps Basemap v4 prebuilt vector data",
+  "publisher": "Protomaps; underlying OpenStreetMap and Natural Earth contributors",
+  "source": {
+    "url": "https://docs.protomaps.com/basemaps/downloads",
+    "retrieved": "2026-10-18"
+  },
+  "rights": {
+    "license": "Publisher distributes the basemap as an Open Database License Produced Work, with OpenStreetMap attribution required. Retain ODbL obligations for queryable geometry and derivations under OrcMaps data policy.",
+    "license_class": "ODBL",
+    "commercial_use_allowed": true,
+    "redistribution_allowed": true,
+    "modification_allowed": true,
+    "attribution_required": true,
+    "share_alike_required": true,
+    "source_disclosure_required": true
+  },
+  "evidence": {
+    "rights_url": "https://docs.protomaps.com/basemaps/downloads",
+    "reviewed_date": "2026-10-18",
+    "confidence": "CONFIRMED"
+  },
+  "policy": {
+    "official_pack_allowed": true,
+    "clean_pack_allowed": false
+  },
+  "notes": "Covers Protomaps v4 PREBUILT vector data, not the separate raw-OSM acquisition process, Google map content, or any raster tile service. Publisher explicitly labels the distributed basemap an ODbL Produced Work; this record does not reinterpret that statement as a waiver of underlying data obligations. The share-alike/source-disclosure flags are conservative OrcMaps distribution policy for retained queryable geometry, not a claim that rendering with this data changes the engine's code license. Include visible OpenStreetMap attribution and https://www.openstreetmap.org/copyright, preserve upstream attribution, and document the source and extract process with each released artifact. No OpenMapTiles schema attribution is inferred for this distinct Tilezen-derived profile. Assessment input: https://data.source.coop/protomaps/openstreetmap/v4.pmtiles, whose retrieved metadata declares version 4.14.3 and OSM replication timestamp 2026-03-31T04:00:00Z. These are publisher metadata claims, not a signed upstream source digest. The local z0-8 extracted input has its own full SHA-256 and must be retained for reproducible downstream builds; the 134 GB upstream object was not fully hashed. This source-policy approval does not approve any particular pack, source hash, device compatibility, hosting account, publication or release. Those remain separate gates. Do not hotlink devices to the upstream assessment mirror. References: https://docs.protomaps.com/basemaps/layers and https://source.coop/protomaps/openstreetmap/v4.pmtiles."
+}

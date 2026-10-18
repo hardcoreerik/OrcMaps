@@ -61,4 +61,12 @@ Pricing reference: https://developers.cloudflare.com/r2/pricing/ (checked Octobe
 
 ## Remaining gates
 
+### Provenance follow-up
+
+The retrieved metadata supplies more precise publisher-reported identity than the object's Last-Modified alone: basemap version **4.14.3**, Planetiler **0.10.1**, Planetiler commit `9c4f2c14680356aa7bb9e1ad9ab164c4ebe0fa55`, OSM hourly replication sequence **118749**, replication timestamp **2026-03-31T04:00:00Z**. Planetiler's own build timestamp is `2026-03-10T11:20:46.523Z`; it is not the OSM snapshot time. No inference that the Planetiler commit is the basemap generator's commit.
+
+Added a distinct `protomaps-basemap-v4` source registry record, citing the publisher's explicit data terms. It preserves attribution and conservative OrcMaps open-data distribution obligations. Source-policy permission is not a signed catalog entry, publication approval or proof that any particular pack is compatible. Preserve the full hashed 543 MB local extract as an immutable production INPUT if selected; a reproducible downstream pack can reference that actual input hash, without pretending we have a full digest of the 134 GB upstream object.
+
+Compatibility audit: `src/core/pack.cpp::IsSupportedSchemaVersion` still allows only OpenMapTiles and the Natural Earth overview. OrcSDR's Pipeline also rejects Protomaps and currently uses the old single-feature heuristic. Therefore the newly tested batch classifier is not sufficient to install this candidate. Do not weaken those gates or relabel the archive. Wire verified single-feature classification and actual map behavior before enabling pack-manifest support, then test JSON discovery/selection and pipeline paths together.
+
 Select/verify the actual input profile or reproducible compatible production build, implement labels and boundary styling, inspect full viewports and all required zooms, measure Tab5 under radio reception, verify safe download/activation and source licensing, then obtain publication/hosting approval. Structural verification and eleven tiles do not prove all 33,167 tile entries or full-world quality. This candidate establishes a real size/coverage baseline; it does not close Phase 1 or release gates on its own.
