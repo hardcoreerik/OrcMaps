@@ -8,6 +8,24 @@
 
 namespace orcmap {
 
+// Reusable per-frame state for a streaming caller that renders many features
+// from the same tile. It removes the two costs the render path otherwise pays
+// per feature: a heap allocation for the polygon vertex buffer, and a rebuild
+// of the tile's screen map (which runs Mercator center math).
+//
+// The cached map is invalidated whenever the tile, its world copy, the
+// feature extent, or the viewport changes, so a scratch may live for a whole
+// frame. It is not thread-safe.
+struct RenderScratch {
+  std::vector<int> poly_xy;
+  bool have_map = false;
+  TileId tile{};
+  int64_t unwrapped_x = 0;
+  uint32_t extent = 0;
+  Viewport viewport{};
+  TileScreenMap map;
+};
+
 // Fills the whole target with the style background, once per map frame.
 // Must be called before the per-tile RenderFeatureTile draws; tiles do
 // not clear the target. Color comes from ResolveFeatureStyle(kBackground).
@@ -53,5 +71,12 @@ bool RenderFeatureTileAt(const FeatureTile& features,
 bool RenderFeatureAt(const Feature& feature, const TilePlacement& placement,
                      const Viewport& viewport, const MapStyle& style,
                      RenderTarget* target);
+
+// As above, reusing `scratch` across features. Pass the same scratch for
+// every feature streamed from one tile; it allocates at most once for the
+// polygon vertex buffer and prepares the tile map at most once.
+bool RenderFeatureAt(const Feature& feature, const TilePlacement& placement,
+                     const Viewport& viewport, const MapStyle& style,
+                     RenderTarget* target, RenderScratch* scratch);
 
 }  // namespace orcmap

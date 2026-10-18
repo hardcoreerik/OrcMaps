@@ -143,6 +143,9 @@ struct StreamContext {
   orcmap::TileId tile{};     // the tile these features came from
   size_t features = 0;
   double inner_ms = 0.0;     // time attributed to translate/classify/render
+  // Reused across every feature of this tile: no per-feature vertex buffer
+  // allocation and no per-feature screen-map rebuild.
+  orcmap::RenderScratch scratch;
 };
 
 bool StreamFeature(const orcmap::Feature& decoded, void* ctx) {
@@ -172,7 +175,7 @@ bool StreamFeature(const orcmap::Feature& decoded, void* ctx) {
     placement.tile = s.tile;
     placement.unwrapped_x = unwrapped_x;
     if (!orcmap::RenderFeatureAt(feature, placement, *s.viewport, *s.style,
-                                 s.target)) {
+                                 s.target, &s.scratch)) {
       s.frame->error_stage = "render";
     }
   }

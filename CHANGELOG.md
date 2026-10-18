@@ -5,7 +5,34 @@ OrcMaps follows semantic versioning with pre-1.0 discipline (see
 change, but only in a new minor version, and every such change is listed here.
 Consumers pin a release by its full commit SHA (`docs/ORCSDR_INTEGRATION.md`).
 
-## Unreleased
+## 0.2.3 - 2026-10-17
+
+Combines the integer render path with the polygon-ring and streaming-cleanup
+fixes, which had landed on separate branches after 0.2.1. Both are required
+together: the 0.2.2 commit as it existed on its own branch lacked
+`FillPolygonRings` and the allocation-free scratch cleanup that the OrcSDR
+engine pin already relies on, so pinning it directly would have regressed world
+views and re-introduced an allocating cleanup path. Nothing from 0.2.2 is
+removed here.
+
+### Changed
+
+- **The per-vertex and per-segment render path no longer uses double
+  precision.** `ProjectLocal` evaluated `origin + local * scale` in IEEE
+  double and clamped with `isfinite`/`floor`; on ESP32, whose FPU is
+  single-precision only, the compiled function made ~18 soft-float ROM calls
+  per projected vertex. Disassembly of the CYD firmware showed
+  `__floatsidf`, `__muldf3`, `__adddf3`, `__unorddf2`, `__gtdf2`, `__gedf2`,
+  `__ledf2`, `floor` and `__fixdfsi` twice each per call. `TileScreenMap` now
+  also carries the coefficients in Q16.16 and `ProjectLocal` is integer-only
+  (two multiplies and a shift per axis).
+- **`ClipLineToPixelRect` clips with exact rational arithmetic.** It made ~50
+  soft-float calls per segment, including four `__divdf3`. Endpoints beyond
+  +-2^20 still take an equivalent double path, so a saturated coordinate
+  clips exactly as before.
+- **`RasterStrokeWidthPx` rounds in single precision** rather than promoting
+  to double and calling `floor`.
+- A line string now projects each vertex once instead of once per segment.
 
 ### Fixed
 
@@ -19,6 +46,12 @@ Consumers pin a release by its full commit SHA (`docs/ORCSDR_INTEGRATION.md`).
   those patches. Rings are now grouped into parts (a ring winding like the
   first is a new exterior part, the opposite winding is a hole) and each part
   is filled even-odd.
+- **The streaming scratch is released without allocating during cleanup.** The
+  trim path ran `std::vector` copy-and-swap for the feature buffer and
+  `clear()` + `shrink_to_fit()` for the layer tables, both of which allocate,
+  and the trim runs from a scope guard that can execute while unwinding
+  `std::bad_alloc`. Every trim is now an allocation-free swap with an empty
+  vector.
 
 ### Added
 
@@ -28,10 +61,25 @@ Consumers pin a release by its full commit SHA (`docs/ORCSDR_INTEGRATION.md`).
   behaviour, so an existing `RenderTarget` keeps compiling and drawing as
   before. The host `FramebufferTarget` and the M5GFX `DisplayTarget` override
   it; `FillPolygon` is now the single-ring case.
+- `RenderScratch` plus `RenderFeatureAt(..., RenderScratch*)`: a streaming
+  caller reuses one scratch per tile, so the polygon vertex buffer is
+  allocated at most once and the tile's screen map is prepared once instead
+  of once per feature. The 5-argument `RenderFeatureAt` is unchanged.
+- `TileScreenMap::origin_sx_q16`, `origin_sy_q16`, `scale_q16`. They are
+  derived, so build maps with `MakeTileScreenMap` /
+  `MakeTilePlacementScreenMap`. The struct grew, so consumers must recompile.
 
 ### Removed
 
 - The "polygons are filled from their first ring only" known limitation.
+
+**The render path change does not move a pixel; the polygon change does, on
+purpose.** The host render (synthetic 1280x720) and `pack-inspect preview` for
+Springfield z14, Springfield z15, world z2 and Oregon z7 are byte-identical to
+the previous engine revision that already had the polygon and cleanup fixes,
+and `tests/host/test_clip.cpp` compares the integer clipper against an
+independent long-double reference over 4,000 random segments. Device timings
+for the integer path have not been measured; the host is not a proxy for ESP32.
 
 ## 0.2.1 — 2026-09-25
 

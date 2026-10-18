@@ -8,13 +8,35 @@ namespace orcmap {
 
 namespace {
 
-int SaturateToInt(double v) {
+// Converts a screen-coordinate double to Q16.16 once, when the map is
+// prepared; ProjectLocal then stays in integer arithmetic. Rounding here is
+// the inverse of the shift-then-floor in FloorQ16ToInt, so a value that is
+// exactly representable in Q16.16 round-trips unchanged.
+int64_t ToQ16(double v) {
   if (!std::isfinite(v)) return 0;
-  const double hi = static_cast<double>(std::numeric_limits<int>::max());
-  const double lo = static_cast<double>(std::numeric_limits<int>::min());
-  if (v >= hi) return std::numeric_limits<int>::max();
-  if (v <= lo) return std::numeric_limits<int>::min();
-  return static_cast<int>(std::floor(v));
+  constexpr double kScale = 65536.0;
+  const double scaled = std::floor(v * kScale + 0.5);
+  // int64 in Q16.16 covers +-1.4e14 screen pixels; saturate rather than
+  // overflow if a caller passes something absurd.
+  if (scaled >= 9.2233720368547758e18) {
+    return std::numeric_limits<int64_t>::max();
+  }
+  if (scaled <= -9.2233720368547758e18) {
+    return std::numeric_limits<int64_t>::min();
+  }
+  return static_cast<int64_t>(scaled);
+}
+
+// Arithmetic right shift floors, which is what std::floor did for negatives.
+int FloorQ16ToInt(int64_t v) {
+  const int64_t whole = v >> 16;
+  if (whole > static_cast<int64_t>(std::numeric_limits<int>::max())) {
+    return std::numeric_limits<int>::max();
+  }
+  if (whole < static_cast<int64_t>(std::numeric_limits<int>::min())) {
+    return std::numeric_limits<int>::min();
+  }
+  return static_cast<int>(whole);
 }
 
 // Shortest signed X delta in tile units, range [-n/2, n/2).
@@ -358,6 +380,9 @@ bool MakeTilePlacementScreenMap(const Viewport& viewport,
       (static_cast<double>(placement.tile.y) - center.y) * tile_px +
       static_cast<double>(viewport.height_px) * 0.5;
   out->scale = tile_px / ext;
+  out->origin_sx_q16 = ToQ16(out->origin_sx);
+  out->origin_sy_q16 = ToQ16(out->origin_sy);
+  out->scale_q16 = ToQ16(out->scale);
   out->valid = true;
   return true;
 }
@@ -433,6 +458,9 @@ bool MakeTileScreenMap(const Viewport& viewport, TileId tile, uint32_t extent,
   out->origin_sx = origin_sx;
   out->origin_sy = origin_sy;
   out->scale = tile_px / ext;
+  out->origin_sx_q16 = ToQ16(origin_sx);
+  out->origin_sy_q16 = ToQ16(origin_sy);
+  out->scale_q16 = ToQ16(tile_px / ext);
   out->valid = true;
   return true;
 }
@@ -485,10 +513,14 @@ bool EnumerateVisibleTiles(const Viewport& viewport, std::vector<TileId>* out) {
 void ProjectLocal(const TileScreenMap& map, int32_t local_x, int32_t local_y,
                   int* screen_x, int* screen_y) {
   if (!map.valid) return;
-  const double sx = map.origin_sx + static_cast<double>(local_x) * map.scale;
-  const double sy = map.origin_sy + static_cast<double>(local_y) * map.scale;
-  if (screen_x != nullptr) *screen_x = SaturateToInt(sx);
-  if (screen_y != nullptr) *screen_y = SaturateToInt(sy);
+  if (screen_x != nullptr) {
+    *screen_x = FloorQ16ToInt(map.origin_sx_q16 +
+                              static_cast<int64_t>(local_x) * map.scale_q16);
+  }
+  if (screen_y != nullptr) {
+    *screen_y = FloorQ16ToInt(map.origin_sy_q16 +
+                              static_cast<int64_t>(local_y) * map.scale_q16);
+  }
 }
 
 void TileLocalToScreen(const Viewport& viewport, TileId tile, uint32_t extent,

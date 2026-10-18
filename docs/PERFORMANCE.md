@@ -140,6 +140,27 @@ Visible 24 / present 20 / missing 4 unchanged. First busy tile kept 8
 layers / 202 features (was 12 layers / 2071). Internal heap after that
 MvtTile: ~140 KiB vs ~40 KiB. Render time unchanged.
 
+## Render CPU path: double precision removed (0.2.2, host-verified)
+
+Evidence class: **host render + shipped-binary disassembly. NOT device-measured.**
+
+The `render_ms` figures above include per-vertex projection and per-segment
+clipping. Both ran in IEEE double, which every ESP32 family emulates in
+software (their FPUs are single-precision). Disassembly of the CYD firmware
+shows `orcmap::ProjectLocal` making ~18 soft-float ROM calls per projected
+vertex, and `orcmap::ClipLineToPixelRect` making ~50 per segment including
+four `__divdf3`.
+
+0.2.2 replaces both with integer arithmetic: `ProjectLocal` is Q16.16
+(64-bit multiply + shift per axis) and the clipper keeps exact rationals.
+Rendered output is byte-identical — host render (synthetic 1280x720) and
+`pack-inspect preview` on Springfield z14/z15, world z2 and Oregon z7 — so
+this is a speed and code-size change only, not a rendering change.
+
+The effect on the device numbers above is **unmeasured**. Re-run the CYD
+report on the same three packs before quoting a multiplier; `render_ms` is
+the stage this change targets, `decode_ms` is not.
+
 ## Still unmeasured
 
 LilyGO T-Display-S3 power-to-map and stage timings. Pan/zoom latency. Cache

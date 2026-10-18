@@ -7,8 +7,11 @@ namespace orcmap {
 // outside or the rectangle is empty. On true, endpoints lie in-range.
 //
 // Implemented here from the parametric line / edge-constraint formulation
-// (not copied from another codebase). Doubles are used for t so huge
-// offscreen endpoints cannot overflow an integer intercept multiply.
+// (not copied from another codebase). The accepted parameter interval is
+// kept as exact rationals and the intersection is evaluated in integer
+// arithmetic, because this runs once per drawn line segment on hardware
+// without a double-precision FPU. Endpoints beyond +-2^20 take an equivalent
+// double path, so a saturated (huge) coordinate still clips correctly.
 
 bool ClipLineToPixels(int* x0, int* y0, int* x1, int* y1, int width,
                       int height);

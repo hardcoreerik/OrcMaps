@@ -27,18 +27,6 @@ void DrawPointMapped(RenderTarget* target, const TileScreenMap& map,
   target->DrawPoint(sx, sy, color);
 }
 
-void DrawLineMapped(RenderTarget* target, const TileScreenMap& map, int32_t x0,
-                    int32_t y0, int32_t x1, int32_t y1, Color color,
-                    float width_px) {
-  int sx0 = 0;
-  int sy0 = 0;
-  int sx1 = 0;
-  int sy1 = 0;
-  ProjectLocal(map, x0, y0, &sx0, &sy0);
-  ProjectLocal(map, x1, y1, &sx1, &sy1);
-  target->DrawLine(sx0, sy0, sx1, sy1, color, width_px);
-}
-
 void RenderOneFeature(const Feature& feature, const TileScreenMap& map,
                       const Viewport& viewport, const MapStyle& style,
                       RenderTarget* target, std::vector<int>* poly_xy) {
@@ -63,9 +51,19 @@ void RenderOneFeature(const Feature& feature, const TileScreenMap& map,
     case GeomType::kLineString:
       for (const Path& path : feature.geometry.paths) {
         if (path.size() < 2) continue;
-        for (size_t i = 0; i + 1 < path.size(); ++i) {
-          DrawLineMapped(target, map, path[i].x, path[i].y, path[i + 1].x,
-                         path[i + 1].y, paint.color, paint.width_px);
+        // Project each vertex once and carry the previous screen point. A
+        // projection used to run twice per segment; it is the expensive part
+        // of this loop.
+        int sx0 = 0;
+        int sy0 = 0;
+        ProjectLocal(map, path[0].x, path[0].y, &sx0, &sy0);
+        for (size_t i = 1; i < path.size(); ++i) {
+          int sx1 = 0;
+          int sy1 = 0;
+          ProjectLocal(map, path[i].x, path[i].y, &sx1, &sy1);
+          target->DrawLine(sx0, sy0, sx1, sy1, paint.color, paint.width_px);
+          sx0 = sx1;
+          sy0 = sy1;
         }
       }
       break;
@@ -122,6 +120,48 @@ void RenderOneFeature(const Feature& feature, const TileScreenMap& map,
   }
 }
 
+bool SameViewport(const Viewport& a, const Viewport& b) {
+  return a.zoom == b.zoom && a.width_px == b.width_px &&
+         a.height_px == b.height_px && a.tile_size_px == b.tile_size_px &&
+         a.center_lat_deg == b.center_lat_deg &&
+         a.center_lon_deg == b.center_lon_deg;
+}
+
+bool SameTile(TileId a, TileId b) {
+  return a.z == b.z && a.x == b.x && a.y == b.y;
+}
+
+bool RenderFeatureAtImpl(const Feature& feature, const TilePlacement& placement,
+                         const Viewport& viewport, const MapStyle& style,
+                         RenderTarget* target, RenderScratch& scratch) {
+  if (target == nullptr) return false;
+  if (!ZoomIsValid(viewport.zoom)) return false;
+  if (placement.tile.z != viewport.zoom) return false;
+  const uint32_t extent = feature.extent == 0 ? 4096u : feature.extent;
+
+  // Preparing the map runs Mercator center math, so a streaming caller must
+  // not pay it per feature. Every input it depends on is part of the key.
+  if (!scratch.have_map || scratch.extent != extent ||
+      scratch.unwrapped_x != placement.unwrapped_x ||
+      !SameTile(scratch.tile, placement.tile) ||
+      !SameViewport(scratch.viewport, viewport)) {
+    if (!MakeTilePlacementScreenMap(viewport, placement, extent,
+                                    &scratch.map)) {
+      scratch.have_map = false;
+      return false;
+    }
+    scratch.have_map = true;
+    scratch.tile = placement.tile;
+    scratch.unwrapped_x = placement.unwrapped_x;
+    scratch.extent = extent;
+    scratch.viewport = viewport;
+  }
+
+  RenderOneFeature(feature, scratch.map, viewport, style, target,
+                   &scratch.poly_xy);
+  return true;
+}
+
 }  // namespace
 
 bool ClearMapBackground(const Viewport& viewport, const MapStyle& style,
@@ -149,17 +189,21 @@ bool RenderFeatureTile(const FeatureTile& features, TileId source_tile,
 bool RenderFeatureAt(const Feature& feature, const TilePlacement& placement,
                      const Viewport& viewport, const MapStyle& style,
                      RenderTarget* target) {
-  if (target == nullptr) return false;
-  if (!ZoomIsValid(viewport.zoom)) return false;
-  if (placement.tile.z != viewport.zoom) return false;
-  const uint32_t extent = feature.extent == 0 ? 4096u : feature.extent;
-  TileScreenMap map;
-  if (!MakeTilePlacementScreenMap(viewport, placement, extent, &map)) {
-    return false;
+  RenderScratch scratch;
+  return RenderFeatureAt(feature, placement, viewport, style, target,
+                         &scratch);
+}
+
+bool RenderFeatureAt(const Feature& feature, const TilePlacement& placement,
+                     const Viewport& viewport, const MapStyle& style,
+                     RenderTarget* target, RenderScratch* scratch) {
+  if (scratch != nullptr) {
+    return RenderFeatureAtImpl(feature, placement, viewport, style, target,
+                               *scratch);
   }
-  std::vector<int> poly_xy;
-  RenderOneFeature(feature, map, viewport, style, target, &poly_xy);
-  return true;
+  RenderScratch one_shot;
+  return RenderFeatureAtImpl(feature, placement, viewport, style, target,
+                             one_shot);
 }
 
 bool RenderFeatureTileAt(const FeatureTile& features,
@@ -173,7 +217,7 @@ bool RenderFeatureTileAt(const FeatureTile& features,
   TileScreenMap map;
   uint32_t prepared_extent = 0;
   bool have_map = false;
-  std::vector<int> poly_xy;
+  RenderScratch scratch;
   for (const Feature& feature : features.features) {
     const uint32_t extent = feature.extent == 0 ? 4096u : feature.extent;
     if (!have_map || extent != prepared_extent) {
@@ -183,7 +227,7 @@ bool RenderFeatureTileAt(const FeatureTile& features,
       prepared_extent = extent;
       have_map = true;
     }
-    RenderOneFeature(feature, map, viewport, style, target, &poly_xy);
+    RenderOneFeature(feature, map, viewport, style, target, &scratch.poly_xy);
   }
   return true;
 }

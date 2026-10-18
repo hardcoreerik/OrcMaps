@@ -340,6 +340,57 @@ void TestTinyMvtPipelineExperimentalClassifier(const std::string& path) {
   ORCMAP_EXPECT_TRUE(fb.At(0, 0) == orcmap::Color::Rgb(8, 10, 12));
 }
 
+void TestRenderScratchMatchesFreshScratch() {
+  const orcmap::MapStyle& style = orcmap::styles::OrcSdrDark();
+  orcmap::FeatureTile tile;
+  tile.features.push_back(MakePoly(
+      orcmap::FeatureKind::kWater, true,
+      {orcmap::Point{0, 0}, orcmap::Point{2048, 0}, orcmap::Point{2048, 2048},
+       orcmap::Point{0, 2048}}));
+  orcmap::Feature line;
+  line.kind = orcmap::FeatureKind::kMotorway;
+  line.kind_assigned = true;
+  line.extent = 4096;
+  line.geometry.type = orcmap::GeomType::kLineString;
+  line.geometry.paths.push_back({orcmap::Point{0, 1024},
+                                 orcmap::Point{4096, 2048},
+                                 orcmap::Point{4096, 4096}});
+  tile.features.push_back(line);
+
+  // A reused scratch must be indistinguishable from a fresh one, including
+  // after the viewport changes -- the cached screen map is keyed on every
+  // input it depends on.
+  const orcmap::Viewport first = Z0Frame(32);
+  orcmap::Viewport second = first;
+  second.center_lon_deg = 2.5;
+
+  orcmap::host::FramebufferTarget fresh(32, 32);
+  orcmap::host::FramebufferTarget shared(32, 32);
+  orcmap::RenderScratch scratch;
+
+  const orcmap::Viewport* viewports[2] = {&first, &second};
+  for (const orcmap::Viewport* vp : viewports) {
+    ORCMAP_EXPECT_TRUE(orcmap::ClearMapBackground(*vp, style, &fresh));
+    ORCMAP_EXPECT_TRUE(orcmap::ClearMapBackground(*vp, style, &shared));
+    orcmap::TilePlacement placement;
+    placement.tile = orcmap::TileId{0, 0, 0};
+    placement.unwrapped_x = 0;
+    for (const orcmap::Feature& feature : tile.features) {
+      orcmap::RenderScratch one_shot;
+      ORCMAP_EXPECT_TRUE(orcmap::RenderFeatureAt(
+          feature, placement, *vp, style, &fresh, &one_shot));
+      ORCMAP_EXPECT_TRUE(orcmap::RenderFeatureAt(
+          feature, placement, *vp, style, &shared, &scratch));
+    }
+  }
+
+  for (int y = 0; y < 32; ++y) {
+    for (int x = 0; x < 32; ++x) {
+      ORCMAP_EXPECT_TRUE(fresh.At(x, y) == shared.At(x, y));
+    }
+  }
+}
+
 }  // namespace
 
 void RunRenderTests(const std::string& mvt_fixture_path) {
@@ -357,5 +408,6 @@ void RunRenderTests(const std::string& mvt_fixture_path) {
   TestPolygonHoleIsSubtracted();
   TestPolygonWindingConventionDoesNotMatter();
   TestPointAndLineString(orcmap::styles::OrcSdrDark());
+  TestRenderScratchMatchesFreshScratch();
   TestTinyMvtPipelineExperimentalClassifier(mvt_fixture_path);
 }

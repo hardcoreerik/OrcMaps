@@ -28,8 +28,10 @@ inline constexpr int kMaxRasterStrokePx = 64;
 inline int RasterStrokeWidthPx(float width_px) {
   if (!std::isfinite(width_px) || width_px <= 0.0f) return 0;
   if (width_px <= 1.0f) return 1;
-  const double rounded = std::floor(static_cast<double>(width_px) + 0.5);
-  int w = static_cast<int>(rounded);
+  // Single precision on purpose: this runs per drawn segment, and no ESP32
+  // FPU implements double. For the positive values that reach here,
+  // truncation is floor(width_px + 0.5).
+  int w = static_cast<int>(width_px + 0.5f);
   if (w < 2) w = 2;
   if (w > kMaxRasterStrokePx) w = kMaxRasterStrokePx;
   return w;

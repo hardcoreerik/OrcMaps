@@ -127,12 +127,21 @@ bool ZoomAtScreenPoint(Viewport* viewport, double screen_x, double screen_y,
 // Prepared per-source-tile map: Mercator center math runs once, then each
 // vertex is origin + local * scale. Invalid when zoom is out of 0..31,
 // source tile z != viewport zoom, or `out` is null.
+//
+// The *_q16 fields are the same coefficients in Q16.16 and are what
+// ProjectLocal uses: ESP32 has a single-precision FPU only, so a double
+// multiply in a per-vertex path is a soft-float ROM call (~9 of them per
+// coordinate). They are derived, so build a map with MakeTileScreenMap /
+// MakeTilePlacementScreenMap rather than filling in the doubles yourself.
 struct TileScreenMap {
   bool valid = false;
   uint8_t zoom = 0;
   double origin_sx = 0.0;  // screen x of tile-local (0, 0)
   double origin_sy = 0.0;
   double scale = 0.0;      // screen pixels per tile-local unit
+  int64_t origin_sx_q16 = 0;
+  int64_t origin_sy_q16 = 0;
+  int64_t scale_q16 = 0;
 };
 
 bool MakeTileScreenMap(const Viewport& viewport, TileId tile, uint32_t extent,
@@ -161,8 +170,9 @@ bool MakeTilePlacementScreenMap(const Viewport& viewport,
 // use EnumerateVisibleTilePlacements for that.
 bool EnumerateVisibleTiles(const Viewport& viewport, std::vector<TileId>* out);
 
-// Cheap path after MakeTileScreenMap. Writes saturated int screen coords
-// (non-finite maps to 0). `map.valid` must be true.
+// Cheap path after MakeTileScreenMap. Writes saturated int screen coords.
+// Integer-only: one 64-bit multiply and one shift per axis, no floating
+// point. `map.valid` must be true.
 void ProjectLocal(const TileScreenMap& map, int32_t local_x, int32_t local_y,
                   int* screen_x, int* screen_y);
 
