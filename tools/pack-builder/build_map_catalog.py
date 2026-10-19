@@ -7,10 +7,11 @@ import base64
 import datetime as dt
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 import tempfile
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 
 MAX_CATALOG = 128 * 1024
 MAX_MANIFEST = 64 * 1024
@@ -30,6 +31,26 @@ def decode(text: str) -> dict:
 
 
 def encode(value: dict) -> bytes:
+    nodes = 0
+    def bounded(item, depth):
+        nonlocal nodes
+        nodes += 1
+        if nodes > 4096:
+            raise ValueError("catalog exceeds 4096 JSON nodes")
+        if isinstance(item, str) and "\0" in item:
+            raise ValueError("catalog strings must not contain NUL")
+        if isinstance(item, (dict, list)):
+            if depth >= 16:
+                raise ValueError("catalog nesting exceeds 16 containers")
+            if isinstance(item, dict):
+                if len(item) > 128 or any(not isinstance(k, str) or "\0" in k for k in item):
+                    raise ValueError("invalid or oversized object keys")
+                values = item.values()
+            else:
+                values = item
+            for child in values:
+                bounded(child, depth + 1)
+    bounded(value, 0)
     data = (json.dumps(value, sort_keys=True, separators=(",", ":"),
                        ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
     if len(data) > MAX_CATALOG:
@@ -55,7 +76,7 @@ def timestamp(value: str) -> dt.datetime:
         result = dt.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
     except ValueError as error:
         raise ValueError("timestamp must be YYYY-MM-DDTHH:MM:SSZ") from error
-    if result.strftime("%Y-%m-%dT%H:%M:%SZ") != value:
+    if result.year < 1970 or result.strftime("%Y-%m-%dT%H:%M:%SZ") != value:
         raise ValueError("timestamp must use canonical UTC format")
     return result
 
@@ -65,13 +86,18 @@ def immutable_url(value: str, digest: str) -> None:
             any(ord(c) <= 32 or ord(c) >= 127 for c in value)):
         raise ValueError("invalid download URL")
     parsed = urlsplit(value)
-    parts = unquote(parsed.path).split("/")
+    parts = parsed.path.split("/")
     if (parsed.scheme != "https" or not parsed.hostname or
             parsed.username is not None or parsed.password is not None or
             parsed.query or parsed.fragment or "\\" in value or
             any(part in (".", "..") for part in parts) or digest not in parts or
             not parsed.path.endswith(".pmtiles") or parsed.port not in (None, 443)):
         raise ValueError("require HTTPS archive URL with SHA-256 path segment and no credentials/query")
+    if (len(parsed.hostname) > 253 or
+            any(not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+                for label in parsed.hostname.split(".")) or
+            not re.fullmatch(r"/[A-Za-z0-9._~/-]*", parsed.path)):
+        raise ValueError("v1 requires a DNS host and plain ASCII archive path")
 
 
 def assemble(spec: dict, root: Path, verify_directory) -> dict:

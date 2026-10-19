@@ -64,6 +64,8 @@ class CatalogTests(unittest.TestCase):
                     "https://maps.test/latest.pmtiles", "https://maps.test/../" + self.digest,
                     f"https://maps.test/{self.digest}/x?token=secret",
                     f"https://maps.test/{self.digest}/x#fragment",
+                    f"https://maps.test/{self.digest}/x%20y.pmtiles",
+                    f"https://-bad.test/{self.digest}/x.pmtiles",
                     f"https://maps.test/{self.digest}/x\n"):
             with self.subTest(url=url):
                 spec = copy.deepcopy(self.spec)
@@ -79,7 +81,8 @@ class CatalogTests(unittest.TestCase):
     def test_revision_time_and_limits_are_checked(self):
         for key, value in (("revision", True), ("revision", 0), ("revision", 1.5),
                            ("expires_at", "2026-01-01T00:00:00Z"),
-                           ("generated_at", "not a timestamp"), ("packs", [])):
+                           ("generated_at", "not a timestamp"),
+                           ("generated_at", "1900-01-01T00:00:00Z"), ("packs", [])):
             with self.subTest(key=key, value=value):
                 spec = copy.deepcopy(self.spec)
                 spec[key] = value
@@ -101,6 +104,16 @@ class CatalogTests(unittest.TestCase):
         with mock.patch.object(CATALOG.subprocess, "run", return_value=result):
             with self.assertRaisesRegex(ValueError, "strict header"):
                 CATALOG.engine_preflight(Path("verifier"), self.root)
+
+    def test_payload_matches_device_structure_limits(self):
+        deep = 0
+        for _ in range(17):
+            deep = [deep]
+        for value in ({"x": "hidden\x00text"}, {"x": [0]*4096},
+                      {str(i): i for i in range(129)}, {"x": deep}):
+            with self.subTest(value_type=type(value)):
+                with self.assertRaises(ValueError):
+                    CATALOG.encode(value)
 
     def test_signature_verifies_and_modified_payload_fails(self):
         openssl = Path("C:/Program Files/Git/usr/bin/openssl.exe")

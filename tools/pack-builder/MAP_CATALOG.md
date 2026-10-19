@@ -26,6 +26,9 @@ include the archive's actual SHA-256 as a complete path segment, and omit
 credentials, query strings and fragments. Four mirrors and 32 packs are the
 limits. URL naming alone cannot guarantee that a server never changes data;
 the download's expected hash remains mandatory.
+Version 1 uses DNS hostnames (or IPv4 text), port 443, and plain ASCII paths
+containing letters, digits, `/`, `-`, `.`, `_`, `~`. Percent-encoded paths and
+IPv6 literals are outside this initial contract. UTC dates start at 1970.
 
 Build the current `tools/pack-verify` executable first. The builder requires
 its `header-coverage-v1` preflight contract, refusing older warning-only
@@ -61,6 +64,10 @@ entries containing the complete pack manifest plus an `archive` object with
 The manifest retains bounds, detail/zoom, source/build identity and credits.
 Payloads are bounded to 128 KiB; revision is a positive integer no greater
 than 2^53−1, allowing exact interpretation by the consumer's JSON library.
+The shared device limits are 4096 JSON value nodes, at most 128 members per
+object, and 16 nested containers. NUL characters are refused in strings/keys.
+The builder enforces these before signing so it cannot emit a payload the
+bounded consumer would reject merely for structure.
 
 ## Consumer gates still required
 
@@ -70,6 +77,14 @@ duplicate keys, unsupported profiles and unsafe URLs; compare revision against
 persisted accepted state and check expiry with a trustworthy clock. Merely
 having those fields in this builder does not implement rollback/freshness
 protection. A clock-unavailable policy still needs an explicit implementation.
+
+The integration branch now has a worker-only signed consumer with host tests:
+`ui/map_catalog.cpp` authenticates before parsing and checks these bounds,
+schema, manifests, URL/identity agreement, expiry and supplied revision/hash.
+It refuses downloads when the caller cannot provide trusted UTC, and rejects
+reuse of one revision with different payload bytes. It is not yet wired to
+network acquisition or persisted accepted-state handling; no production key
+or endpoint is configured by that source change.
 
 The device must then enforce the expected archive size/hash, TLS, resume object
 identity, bounded storage, cancellation, staging and activation/recovery. A

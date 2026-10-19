@@ -65,3 +65,24 @@ configuration, freshness/rollback handling, HTTP/SD download-resume worker,
 activation recovery and setup wiring. Production hosting and publication remain
 unapproved. No full host suite or native build was needed for these tool-only
 changes; actual Tab5 download behavior remains untested.
+
+## Firmware-consumer contract alignment
+
+The following integration step added a bounded OrcSDR consumer and compared
+its accepted language with this builder. The builder now refuses percent-
+encoded/non-ASCII paths, malformed DNS labels, dates before 1970, NUL strings,
+more than 4096 JSON nodes/128 object members and nesting beyond 16 containers.
+These are explicit v1 constraints, documented in `MAP_CATALOG.md`, rather than
+silently producing signed catalogs the device would reject. Regressions
+reproduced the unsupported URL and structure acceptance before correction.
+
+Actual final command: `python -m unittest discover -s tests -p test_map_catalog_builder.py`.
+Result: **10 tests passed**; root log
+`map-catalog-consumer-contract-green-20261019.log`. Separate red logs are
+`map-catalog-consumer-contract-red-20261019.log` and
+`map-catalog-structure-red-20261019.log`.
+
+OrcSDR's actual crypto consumer accepted the existing test-only global catalog
+payload/signature/public-key triplet with exit 0. That integration-side log is
+`map-catalog-consumer-interoperability-20261019.log`. No production publication,
+key or device operation was involved.
