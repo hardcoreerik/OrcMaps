@@ -64,6 +64,15 @@ target_include_directories(orcmap_host_tests PRIVATE
 )
 
 enable_testing()
+add_executable(orcmap_frame_transform_tests test_frame_transform.cpp
+    ${ORCMAP_ROOT}/src/core/geo.cpp ${ORCMAP_ROOT}/src/core/viewport.cpp)
+target_include_directories(orcmap_frame_transform_tests PRIVATE ${ORCMAP_ROOT}/include)
+if(MSVC)
+  target_compile_options(orcmap_frame_transform_tests PRIVATE /UNDEBUG)
+else()
+  target_compile_options(orcmap_frame_transform_tests PRIVATE -UNDEBUG)
+endif()
+add_test(NAME orcmap_frame_transform_tests COMMAND orcmap_frame_transform_tests)
 add_executable(orcmap_label_tests test_labels.cpp ${ORCMAP_ROOT}/src/render/labels.cpp
     ${ORCMAP_ROOT}/src/core/geo.cpp ${ORCMAP_ROOT}/src/core/viewport.cpp
     ${ORCMAP_ROOT}/src/render/style.cpp)
