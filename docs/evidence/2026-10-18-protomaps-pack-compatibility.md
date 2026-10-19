@@ -51,3 +51,22 @@ refuse zoom 9 rather than claiming missing detail. Result 1/1 passed; logs
 `pack-profile-global-bounds-build-20261018.log` and
 `pack-profile-global-bounds-20261018.log`. This did not rehash the archive or
 inspect tiles; discovery tests still use a fake filesystem inventory.
+
+## Approved full configured host regression
+
+User separately approved one full host CTest run. Tested code checkpoint
+`dbb1b98b8eebbb8b30ed57b37c87ea4d76c66800` on the clean tracked worktree.
+From worktree root under WSL:
+
+```sh
+cmake --build .local/pack-profile-host -j 2
+ctest --test-dir .local/pack-profile-host --output-on-failure
+```
+
+Result: all 7 configured CTest programs passed (pack, frame transform, labels,
+profile classifier, screen bounds, tile composition and general host tests).
+Logs in root: `pack-profile-full-build-20261018.log` and
+`pack-profile-full-tests-20261018.log`. No build/test failures. This run does
+not include separately configured font backends, Python builder/provenance
+suites, firmware linking, device operation or full global-tile acceptance.
+No push, consumer pin update, archive transfer or publication occurred.
