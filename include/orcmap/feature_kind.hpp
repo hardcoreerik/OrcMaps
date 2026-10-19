@@ -31,6 +31,9 @@ enum class FeatureKind : uint8_t {
   kLabelPrimary,    // e.g. city/place names
   kLabelSecondary,  // e.g. smaller settlements
   kLabelMuted,      // e.g. attribution, minor annotations
+  kBoundaryCountry,
+  kBoundaryRegion,
+  kBoundaryLocal,   // Local administrative units; not universally counties.
   kCount,
 };
 

@@ -1,6 +1,7 @@
 #include "orcmap/style.hpp"
 
 #include <cstring>
+#include <initializer_list>
 
 #include "orcmap/cache_key.hpp"
 #include "test_util.hpp"
@@ -72,6 +73,37 @@ void TestZoomVisibility() {
   ORCMAP_EXPECT_TRUE(orcmap::ResolveFeatureStyle(FeatureKind::kMinorRoad, 14, field).visible);
 }
 
+void TestAdministrativeBoundaryHierarchy() {
+  using K = orcmap::FeatureKind;
+  // Appended kinds preserve numeric identities used by existing consumers.
+  ORCMAP_EXPECT_TRUE(static_cast<int>(K::kBoundary) == 8);
+  ORCMAP_EXPECT_TRUE(static_cast<int>(K::kLabelMuted) == 14);
+  for (auto which : {orcmap::BuiltinStyle::kOrcSdrDark,
+                     orcmap::BuiltinStyle::kStandardLight,
+                     orcmap::BuiltinStyle::kHighContrastField,
+                     orcmap::BuiltinStyle::kNightRedSafe}) {
+    const auto& style = orcmap::GetBuiltinStyle(which);
+    const auto country = orcmap::ResolveFeatureStyle(K::kBoundaryCountry, 0, style);
+    const auto region = orcmap::ResolveFeatureStyle(K::kBoundaryRegion, 4, style);
+    const auto local = orcmap::ResolveFeatureStyle(K::kBoundaryLocal, 6, style);
+    ORCMAP_EXPECT_TRUE(country.visible && region.visible && local.visible);
+    ORCMAP_EXPECT_TRUE(!orcmap::ResolveFeatureStyle(K::kBoundaryRegion, 3, style).visible);
+    ORCMAP_EXPECT_TRUE(!orcmap::ResolveFeatureStyle(K::kBoundaryLocal, 5, style).visible);
+    ORCMAP_EXPECT_TRUE(country.width_px > region.width_px && region.width_px > local.width_px);
+    ORCMAP_EXPECT_TRUE(country.color != region.color && region.color != local.color);
+    ORCMAP_EXPECT_TRUE(country.color != orcmap::Color{});
+    ORCMAP_EXPECT_TRUE(region.color != orcmap::Color{});
+    ORCMAP_EXPECT_TRUE(local.color != orcmap::Color{});
+    ORCMAP_EXPECT_TRUE(orcmap::ResolveFeatureStyle(K::kBoundary, 0, style).visible);
+    ORCMAP_EXPECT_TRUE(style.version == 2);
+    auto previous = style;
+    previous.version = 1;
+    ORCMAP_EXPECT_TRUE(
+        orcmap::RenderedTileCacheKey::Make("global", 6, 10, 20, style) !=
+        orcmap::RenderedTileCacheKey::Make("global", 6, 10, 20, previous));
+  }
+}
+
 void TestNightStyleHasNoBlueLight() {
   // Every color in Night/Red-Safe must be red-dominant with zero-or-low
   // blue, per its design brief ("no blue light", "no bright white").
@@ -138,6 +170,7 @@ void RunStyleTests() {
   TestDefaultStyleExists();
   TestStyleManagerSwitching();
   TestZoomVisibility();
+  TestAdministrativeBoundaryHierarchy();
   TestNightStyleHasNoBlueLight();
   TestStylesAreDistinct();
   TestCacheKeyChangesWithStyle();
