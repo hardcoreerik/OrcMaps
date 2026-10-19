@@ -96,7 +96,8 @@ std::string MakePackId(const PackManifest& manifest) {
 
 bool IsSupportedSchemaVersion(std::string_view schema_version) {
   return schema_version == "openmaptiles-3.16" ||
-         schema_version == "orcmaps-overview-1";
+         schema_version == "orcmaps-overview-1" ||
+         schema_version == "protomaps-v4";
 }
 
 PackValidationError ValidatePackManifest(const PackManifest& manifest) {

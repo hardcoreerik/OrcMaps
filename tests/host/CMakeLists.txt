@@ -64,6 +64,13 @@ target_include_directories(orcmap_host_tests PRIVATE
 )
 
 enable_testing()
+add_executable(orcmap_pack_tests pack_main.cpp test_pack.cpp test_pack_discovery.cpp
+    ${ORCMAP_ROOT}/src/core/geo.cpp ${ORCMAP_ROOT}/src/core/viewport.cpp
+    ${ORCMAP_ROOT}/src/core/pack.cpp ${ORCMAP_ROOT}/src/core/pack_json.cpp
+    ${ORCMAP_ROOT}/src/core/pack_discovery.cpp ${ORCMAP_ROOT}/adapters/host/pack_filesystem.cpp)
+target_include_directories(orcmap_pack_tests PRIVATE ${ORCMAP_ROOT}/include
+    ${ORCMAP_ROOT}/adapters/host ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME orcmap_pack_tests COMMAND orcmap_pack_tests)
 add_executable(orcmap_frame_transform_tests test_frame_transform.cpp
     ${ORCMAP_ROOT}/src/core/geo.cpp ${ORCMAP_ROOT}/src/core/viewport.cpp)
 target_include_directories(orcmap_frame_transform_tests PRIVATE ${ORCMAP_ROOT}/include)

@@ -507,9 +507,40 @@ void TestHostFileSystemAdapterListsOneDirectoryOnly() {
   std::filesystem::remove_all(root, ec);
 }
 
+void TestProtomapsDiscoveryUsesExistingIntegrityChecks() {
+  FakeFileSystem fs;
+  ManifestSpec spec;
+  spec.schema_version = "protomaps-v4";
+  // Match the assessed global archive's header limits and size.
+  spec.region_id = "world";
+  spec.min_lon = -180.0; spec.max_lon = 180.0;
+  spec.min_lat = -85.0511287; spec.max_lat = 85.0511287;
+  spec.min_zoom = 0; spec.max_zoom = 8; spec.size_bytes = 543380195;
+  fs.names = {"global.manifest.json", "wrongsize.manifest.json"};
+  fs.files["/orcmaps/global.manifest.json"] = ManifestJson(spec);
+  fs.archives["/orcmaps/global.pmtiles"] = spec.size_bytes;
+  spec.region_id = "wrongsize";
+  fs.files["/orcmaps/wrongsize.manifest.json"] = ManifestJson(spec);
+  fs.archives["/orcmaps/wrongsize.pmtiles"] = spec.size_bytes + 1;
+  orcmap::PackCatalog catalog;
+  orcmap::DiscoveryReport report;
+  ORCMAP_EXPECT_TRUE(!orcmap::DiscoverPacks(fs, "/orcmaps", &catalog, &report));
+  ORCMAP_EXPECT_EQ(static_cast<int>(catalog.Packs().size()), 1);
+  if (!catalog.Packs().empty()) {
+    ORCMAP_EXPECT_EQ(catalog.Packs()[0].schema_version, std::string("protomaps-v4"));
+    ORCMAP_EXPECT_EQ(catalog.Packs()[0].archive_path, std::string("/orcmaps/global.pmtiles"));
+    ORCMAP_EXPECT_TRUE(orcmap::ResolvePack(catalog, {150.0, -40.0, 155.0, -30.0}, 8) != nullptr);
+    ORCMAP_EXPECT_TRUE(orcmap::ResolvePack(catalog, {150.0, -40.0, 155.0, -30.0}, 9) == nullptr);
+  }
+  ORCMAP_EXPECT_EQ(static_cast<int>(report.rejected.size()), 1);
+  if (report.rejected.size() == 1)
+    ORCMAP_EXPECT_TRUE(report.rejected[0].rejection == orcmap::PackRejection::kArchiveSizeMismatch);
+}
+
 }  // namespace
 
 void RunPackDiscoveryTests() {
+  TestProtomapsDiscoveryUsesExistingIntegrityChecks();
   TestJsonRoundTripsEveryManifestField();
   TestJsonRejectsMalformedAndHostileInput();
   TestDiscoveryAddsValidPacksAndNamesArchiveByPosition();
