@@ -1,10 +1,24 @@
 #pragma once
 
 #include <cstddef>
+#include <algorithm>
+#include <cstdint>
 
 #include "orcmap/color.hpp"
 
 namespace orcmap {
+
+// Half-open raster rectangle. Use 64-bit intermediate sums for offscreen input.
+struct PixelRect { int x = 0, y = 0, width = 0, height = 0; };
+inline PixelRect IntersectPixelRects(PixelRect a, PixelRect b) {
+  const int x = std::max(a.x, b.x), y = std::max(a.y, b.y);
+  const int64_t right = std::min(int64_t{a.x} + std::max(0, a.width),
+                                 int64_t{b.x} + std::max(0, b.width));
+  const int64_t bottom = std::min(int64_t{a.y} + std::max(0, a.height),
+                                  int64_t{b.y} + std::max(0, b.height));
+  return {x, y, static_cast<int>(std::max(int64_t{0}, right - x)),
+                static_cast<int>(std::max(int64_t{0}, bottom - y))};
+}
 
 // Graphics-library-independent draw surface. Understands pixels and
 // primitives, not FeatureKind, MVT, PMTiles, or application overlays.
@@ -20,6 +34,12 @@ class RenderTarget {
 
   virtual int Width() const = 0;
   virtual int Height() const = 0;
+
+  // Optional native scissor support for composing buffered vector tiles.
+  // A successful setter clips every primitive and permits restoring ClipRect().
+  // Legacy targets keep compiling; false means they retain caller-owned clipping.
+  virtual PixelRect ClipRect() const { return {0, 0, Width(), Height()}; }
+  virtual bool SetClipRect(PixelRect) { return false; }
 
   virtual void FillRect(int x, int y, int w, int h, Color color) = 0;
   virtual void DrawPoint(int x, int y, Color color) = 0;

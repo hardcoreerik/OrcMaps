@@ -53,6 +53,9 @@ bool ClearMapBackground(const Viewport& viewport, const MapStyle& style,
 // first starts a new exterior part; the opposite winding is a hole) and each
 // part is filled even-odd, so holes are subtracted -- see ARCHITECTURE.md.
 // Line strokes use MapPaint::width_px via RenderTarget::DrawLine.
+// Clipping-capable targets restrict buffered geometry to its tile's half-open
+// screen rectangle, intersected with the caller's clip, then restore that clip.
+// Custom targets without SetClipRect support must provide their own tile scissor.
 
 bool RenderFeatureTile(const FeatureTile& features, TileId source_tile,
                        const Viewport& viewport, const MapStyle& style,
@@ -100,6 +103,7 @@ struct ScreenFeature {
   GeomType type = GeomType::kUnknown;
   Color color{};
   float width_px = 1.0f;
+  PixelRect tile_clip;
   // Screen x,y pairs, every path's vertices back to back.
   std::vector<int> xy;
   // Vertices per path: one entry per line string, or one per polygon ring.

@@ -28,6 +28,7 @@ idf_component_register(
          "src/tiles/compression.cpp"
          "src/render/style.cpp"
          "src/render/renderer.cpp"
+         "src/render/labels.cpp"
          "src/render/clip.cpp"
          "adapters/esp_idf/file_byte_source.cpp"
          "adapters/esp_idf/partition_byte_source.cpp"

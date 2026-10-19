@@ -1,5 +1,9 @@
 // Host-only PMTiles / MVT inspector and real-geography preview.
 // Preview visible-tile enumeration is scaffolding, not the Viewport API.
+#ifdef ORCMAP_INSPECT_LABELS
+#include <memory>
+#include "freetype_label_target.hpp"
+#endif
 
 #include "file_byte_source.hpp"
 #include "framebuffer_target.hpp"
@@ -328,7 +332,8 @@ void PrintTileReport(uint8_t z, uint32_t x, uint32_t y, const TileStats& s) {
     auto sit = samples.find(kv.first);
     if (sit != samples.end()) {
       for (const char* interesting : {"class", "subclass", "brunnel", "name",
-                                      "ref", "kind", "type", "structure"}) {
+                                      "ref", "kind", "kind_detail", "admin_level",
+                                      "min_zoom", "type", "structure"}) {
         auto vit = sit->second.find(interesting);
         if (vit == sit->second.end() || vit->second.empty()) continue;
         std::printf("    %s:", interesting);
@@ -461,7 +466,13 @@ int CmdSample(const std::string& path, double lat, double lon, uint8_t zoom,
 int CmdPreview(const std::string& path, double lat, double lon, uint8_t zoom,
                int width, int height, const std::string& out,
                const orcmap::MapStyle& style, bool verbose,
-               const std::string& schema) {
+               const std::string& schema, const std::string& label_font) {
+#ifndef ORCMAP_INSPECT_LABELS
+  if (!label_font.empty()) {
+    std::fprintf(stderr, "label preview requires ORCMAP_INSPECT_LABELS=ON\n");
+    return 1;
+  }
+#endif
   orcmap::host::FileByteSource source(path);
   if (!source.Valid()) {
     std::fprintf(stderr, "cannot open %s\n", path.c_str());
@@ -498,6 +509,15 @@ int CmdPreview(const std::string& path, double lat, double lon, uint8_t zoom,
 
   orcmap::host::FramebufferTarget fb(width, height);
   if (!orcmap::ClearMapBackground(vp, style, &fb)) return 1;
+#ifdef ORCMAP_INSPECT_LABELS
+  orcmap::LabelLayout labels;
+  labels.BeginFrame(width, height);
+  std::unique_ptr<orcmap::host::FreeTypeLabelTarget> text;
+  if (!label_font.empty()) {
+    text = std::make_unique<orcmap::host::FreeTypeLabelTarget>(fb, label_font.c_str(), 24);
+    if (!text->valid()) { std::fprintf(stderr, "cannot load label font\n"); return 1; }
+  }
+#endif
 
   std::vector<size_t> stored;
   std::vector<size_t> raw;
@@ -540,10 +560,37 @@ int CmdPreview(const std::string& path, double lat, double lon, uint8_t zoom,
     s.render_ms =
         std::chrono::duration<double, std::milli>(Clock::now() - r0).count();
     render_sum += s.render_ms;
+#ifdef ORCMAP_INSPECT_LABELS
+    if (text) {
+      orcmap::TileScreenMap map;
+      uint32_t extent = 0;
+      for (const auto& feature : s.features_owned.features) {
+        const uint32_t next = feature.extent ? feature.extent : 4096;
+        if (next != extent) {
+          if (!orcmap::MakeTileScreenMap(vp, tile, next, &map)) return 1;
+          extent = next;
+        }
+        labels.OfferPlace(feature, map, zoom, style);
+      }
+    }
+#endif
     // Release FeatureTile before the next source tile (streaming).
     s.features_owned.features.clear();
     s.features_owned.features.shrink_to_fit();
   }
+  const auto label0 = Clock::now();
+#ifdef ORCMAP_INSPECT_LABELS
+  if (text) {
+    labels.Draw(*text, style.Rule(orcmap::FeatureKind::kLabelPrimary).color,
+                 style.Rule(orcmap::FeatureKind::kBackground).color);
+    const auto& ls = labels.stats();
+    std::printf("HOST_LABELS offered=%u drawn=%u overlap=%u offscreen=%u unsupported=%u pool_overflow=%u invalid=%u oversized=%u\n",
+                ls.offered, ls.drawn, ls.overlap, ls.offscreen, ls.unsupported_glyphs,
+                ls.pool_overflow, ls.invalid_names, ls.oversized_names);
+  }
+#endif
+  const double label_ms =
+      std::chrono::duration<double, std::milli>(Clock::now() - label0).count();
   const auto w0 = Clock::now();
   if (!fb.WritePpm(out)) {
     std::fprintf(stderr, "write failed %s\n", out.c_str());
@@ -555,16 +602,16 @@ int CmdPreview(const std::string& path, double lat, double lon, uint8_t zoom,
       std::chrono::duration<double, std::milli>(Clock::now() - frame0).count();
   const double accounted = enumerate_ms + lookup_sum + decomp_sum + decode_sum +
                            translate_sum + classify_sum + render_sum +
-                           report_sum + write_ms;
+                           report_sum + label_ms + write_ms;
   std::printf("wrote %s visible=%zu found=%zu missing=%zu HOST_frame_ms=%.3f\n",
               out.c_str(), tiles.size(), present, missing, frame_ms);
   std::printf("HOST ONLY — NOT ESP32 PERFORMANCE\n");
   std::printf("HOST ms enumerate=%.3f lookup=%.3f decompress=%.3f decode=%.3f "
               "translate=%.3f classify=%.3f render=%.3f report=%.3f "
-              "write_ppm=%.3f accounted=%.3f unaccounted=%.3f\n",
+              "labels=%.3f write_ppm=%.3f accounted=%.3f unaccounted=%.3f\n",
               enumerate_ms,
               lookup_sum, decomp_sum, decode_sum, translate_sum, classify_sum,
-              render_sum, report_sum, write_ms, accounted, frame_ms - accounted);
+              render_sum, report_sum, label_ms, write_ms, accounted, frame_ms - accounted);
   if (!stored.empty()) {
     std::sort(stored.begin(), stored.end());
     std::sort(raw.begin(), raw.end());
@@ -583,7 +630,8 @@ void Usage() {
       "orcmap_pack_inspect tile ARCHIVE Z X Y\n"
       "orcmap_pack_inspect sample ARCHIVE --lat LAT --lon LON --zoom Z [--radius N]\n"
       "orcmap_pack_inspect preview ARCHIVE --lat LAT --lon LON --zoom Z "
-      "[--width W --height H --out FILE --style ID --schema ID --verbose]\n");
+      "[--width W --height H --out FILE --style ID --schema ID --verbose] "
+      "[--labels-font FONT.ttf (requires ORCMAP_INSPECT_LABELS=ON)]\n");
 }
 
 bool HasFlag(int argc, char** argv, const char* name) {
@@ -626,7 +674,7 @@ int main(int argc, char** argv) {
                    static_cast<uint32_t>(std::strtoul(argv[4], nullptr, 10)),
                    static_cast<uint32_t>(std::strtoul(argv[5], nullptr, 10)), schema);
   }
-  std::string lat_s, lon_s, zoom_s, radius_s, width_s, height_s, out, style_id;
+  std::string lat_s, lon_s, zoom_s, radius_s, width_s, height_s, out, style_id, label_font;
   Flag(argc, argv, "lat", &lat_s);
   Flag(argc, argv, "lon", &lon_s);
   Flag(argc, argv, "zoom", &zoom_s);
@@ -635,6 +683,7 @@ int main(int argc, char** argv) {
   Flag(argc, argv, "height", &height_s);
   Flag(argc, argv, "out", &out);
   Flag(argc, argv, "style", &style_id);
+  Flag(argc, argv, "labels-font", &label_font);
   const bool verbose = HasFlag(argc, argv, "verbose");
   if (cmd == "sample") {
     if (lat_s.empty() || lon_s.empty() || zoom_s.empty()) {
@@ -663,7 +712,7 @@ int main(int argc, char** argv) {
     }
     return CmdPreview(archive, std::atof(lat_s.c_str()), std::atof(lon_s.c_str()),
                       static_cast<uint8_t>(std::atoi(zoom_s.c_str())), width,
-                      height, out, *style, verbose, schema);
+                      height, out, *style, verbose, schema, label_font);
   }
   Usage();
   return 1;

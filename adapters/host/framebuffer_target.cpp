@@ -14,11 +14,20 @@ namespace host {
 FramebufferTarget::FramebufferTarget(int width, int height, Color clear)
     : width_(width < 0 ? 0 : width),
       height_(height < 0 ? 0 : height),
+      clip_{0, 0, width_, height_},
       pixels_(static_cast<size_t>(width_) * static_cast<size_t>(height_),
               clear) {}
 
+bool FramebufferTarget::SetClipRect(PixelRect rect) {
+  if (rect.width < 0 || rect.height < 0) return false;
+  clip_ = IntersectPixelRects({0, 0, width_, height_}, rect);
+  return true;
+}
+
 void FramebufferTarget::Put(int x, int y, Color color) {
   if (x < 0 || y < 0 || x >= width_ || y >= height_) return;
+  if (x < clip_.x || y < clip_.y || int64_t{x} >= int64_t{clip_.x} + clip_.width ||
+      int64_t{y} >= int64_t{clip_.y} + clip_.height) return;
   pixels_[static_cast<size_t>(y) * static_cast<size_t>(width_) +
           static_cast<size_t>(x)] = color;
 }

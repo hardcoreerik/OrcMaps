@@ -41,6 +41,17 @@ class DisplayTarget : public RenderTarget {
 
   int Width() const override { return display_.width(); }
   int Height() const override { return display_.height(); }
+  PixelRect ClipRect() const override {
+    int32_t x, y, width, height;
+    display_.getClipRect(&x, &y, &width, &height);
+    return {x, y, width, height};
+  }
+  bool SetClipRect(PixelRect rect) override {
+    if (rect.width < 0 || rect.height < 0) return false;
+    rect = IntersectPixelRects({0, 0, Width(), Height()}, rect);
+    display_.setClipRect(rect.x, rect.y, rect.width, rect.height);
+    return true;
+  }
 
   void FillRect(int x, int y, int w, int h, Color color) override {
     if (w <= 0 || h <= 0) return;

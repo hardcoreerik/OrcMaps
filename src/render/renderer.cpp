@@ -3,9 +3,29 @@
 #include <cstdint>
 #include <vector>
 
+#include "orcmap/stroke.hpp"
+
 namespace orcmap {
 
 namespace {
+
+PixelRect TileScreenRect(const TileScreenMap& map, const Viewport& viewport) {
+  int x, y;
+  ProjectLocal(map, 0, 0, &x, &y);
+  return {x, y, viewport.tile_size_px, viewport.tile_size_px};
+}
+
+class ScopedClip {
+ public:
+  ScopedClip(RenderTarget* target, PixelRect rect)
+      : target_(target), saved_(target->ClipRect()),
+        changed_(target->SetClipRect(IntersectPixelRects(saved_, rect))) {}
+  ~ScopedClip() { if (changed_) target_->SetClipRect(saved_); }
+ private:
+  RenderTarget* target_;
+  PixelRect saved_;
+  bool changed_;
+};
 
 // Twice the signed area of a projected ring (shoelace). The sign is the ring's winding.
 int64_t SignedArea2(const int* xy, size_t n) {
@@ -49,6 +69,7 @@ void RenderOneFeature(const Feature& feature, const TileScreenMap& map,
                       RenderTarget* target, std::vector<int>* poly_xy) {
   MapPaint paint;
   if (!ResolveDrawablePaint(feature, viewport, style, &paint)) return;
+  ScopedClip tile_clip(target, TileScreenRect(map, viewport));
 
   switch (feature.geometry.type) {
     case GeomType::kPoint:
@@ -199,6 +220,7 @@ bool ProjectFeatureToScreen(const Feature& feature, const TileScreenMap& map,
   out->type = feature.geometry.type;
   out->color = paint.color;
   out->width_px = paint.width_px;
+  out->tile_clip = TileScreenRect(map, viewport);
 
   const bool is_polygon = out->type == GeomType::kPolygon;
   const bool is_line = out->type == GeomType::kLineString;
@@ -236,15 +258,20 @@ bool ProjectFeatureToScreen(const Feature& feature, const TileScreenMap& map,
     if (y < min_y) min_y = y;
     if (y > max_y) max_y = y;
   }
-  out->min_x = min_x;
-  out->max_x = max_x;
-  out->min_y = min_y;
-  out->max_y = max_y;
+  // Band culling needs painted bounds, including the centered stroke brush.
+  const int stroke = is_line ? RasterStrokeWidthPx(paint.width_px) : 1;
+  const int before = stroke / 2;
+  const int after = stroke > 0 ? stroke - before - 1 : 0;
+  out->min_x = min_x - before;
+  out->max_x = max_x + after;
+  out->min_y = min_y - before;
+  out->max_y = max_y + after;
   return true;
 }
 
 void DrawScreenFeature(const ScreenFeature& feature, RenderTarget* target) {
   if (target == nullptr || feature.path_counts.empty()) return;
+  ScopedClip tile_clip(target, feature.tile_clip);
   switch (feature.type) {
     case GeomType::kPoint: {
       size_t v = 0;

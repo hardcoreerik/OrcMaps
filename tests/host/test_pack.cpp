@@ -77,6 +77,24 @@ void TestSupportedInputProfilesAreCentralized() {
                      orcmap::PackValidationError::kCompatibility);
 }
 
+void TestProtomapsProfileRetainsManifestGuards() {
+  auto pack = MakePack("world", -180.0, -85.0511287, 180.0, 85.0511287, 0, 8, 0);
+  pack.schema_version = "protomaps-v4";
+  pack.pack_id = orcmap::MakePackId(pack);
+  ORCMAP_EXPECT_TRUE(orcmap::ValidatePackManifest(pack) == orcmap::PackValidationError::kNone);
+  auto bad = pack;
+  bad.pack_id = "different-identity";
+  ORCMAP_EXPECT_TRUE(orcmap::ValidatePackManifest(bad) == orcmap::PackValidationError::kIdentity);
+  bad = pack; bad.output_sha256 = "invalid";
+  ORCMAP_EXPECT_TRUE(orcmap::ValidatePackManifest(bad) == orcmap::PackValidationError::kArchive);
+  bad = pack; bad.size_bytes = 0;
+  ORCMAP_EXPECT_TRUE(orcmap::ValidatePackManifest(bad) == orcmap::PackValidationError::kArchive);
+  bad = pack; bad.bounds.max_lat_deg = 90;
+  ORCMAP_EXPECT_TRUE(orcmap::ValidatePackManifest(bad) == orcmap::PackValidationError::kBounds);
+  bad = pack; bad.schema_version = "protomaps-v999"; bad.pack_id = orcmap::MakePackId(bad);
+  ORCMAP_EXPECT_TRUE(orcmap::ValidatePackManifest(bad) == orcmap::PackValidationError::kCompatibility);
+}
+
 void TestInvalidBoundsAreRejected() {
   auto pack = MakePack("bad", -10.0, -90.0, 10.0, 30.0, 0, 7, 0);
   ORCMAP_EXPECT_TRUE(orcmap::ValidatePackManifest(pack) ==
@@ -154,6 +172,7 @@ void RunPackTests() {
   TestPackIdentityUsesImmutableInputs();
   TestValidManifestPassesValidation();
   TestSupportedInputProfilesAreCentralized();
+  TestProtomapsProfileRetainsManifestGuards();
   TestInvalidBoundsAreRejected();
   TestInvalidZoomRangeIsRejected();
   TestMissingOfflineAttributionTextIsRejected();

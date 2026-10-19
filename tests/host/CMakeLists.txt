@@ -64,6 +64,53 @@ target_include_directories(orcmap_host_tests PRIVATE
 )
 
 enable_testing()
+add_executable(orcmap_pack_tests pack_main.cpp test_pack.cpp test_pack_discovery.cpp
+    ${ORCMAP_ROOT}/src/core/geo.cpp ${ORCMAP_ROOT}/src/core/viewport.cpp
+    ${ORCMAP_ROOT}/src/core/pack.cpp ${ORCMAP_ROOT}/src/core/pack_json.cpp
+    ${ORCMAP_ROOT}/src/core/pack_discovery.cpp ${ORCMAP_ROOT}/adapters/host/pack_filesystem.cpp)
+target_include_directories(orcmap_pack_tests PRIVATE ${ORCMAP_ROOT}/include
+    ${ORCMAP_ROOT}/adapters/host ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME orcmap_pack_tests COMMAND orcmap_pack_tests)
+add_executable(orcmap_frame_transform_tests test_frame_transform.cpp
+    ${ORCMAP_ROOT}/src/core/geo.cpp ${ORCMAP_ROOT}/src/core/viewport.cpp)
+target_include_directories(orcmap_frame_transform_tests PRIVATE ${ORCMAP_ROOT}/include)
+if(MSVC)
+  target_compile_options(orcmap_frame_transform_tests PRIVATE /UNDEBUG)
+else()
+  target_compile_options(orcmap_frame_transform_tests PRIVATE -UNDEBUG)
+endif()
+add_test(NAME orcmap_frame_transform_tests COMMAND orcmap_frame_transform_tests)
+add_executable(orcmap_label_tests test_labels.cpp ${ORCMAP_ROOT}/src/render/labels.cpp
+    ${ORCMAP_ROOT}/src/core/geo.cpp ${ORCMAP_ROOT}/src/core/viewport.cpp
+    ${ORCMAP_ROOT}/src/render/style.cpp)
+target_include_directories(orcmap_label_tests PRIVATE ${ORCMAP_ROOT}/include)
+add_test(NAME orcmap_label_tests COMMAND orcmap_label_tests)
+add_executable(orcmap_profile_tests test_profiles.cpp
+    ${ORCMAP_ROOT}/src/tiles/mvt_classify_experimental.cpp)
+target_include_directories(orcmap_profile_tests PRIVATE ${ORCMAP_ROOT}/include)
+add_test(NAME orcmap_profile_tests COMMAND orcmap_profile_tests)
+add_executable(orcmap_screen_bounds_tests
+    test_screen_bounds.cpp
+    ${ORCMAP_ROOT}/src/core/geo.cpp
+    ${ORCMAP_ROOT}/src/core/viewport.cpp
+    ${ORCMAP_ROOT}/src/render/style.cpp
+    ${ORCMAP_ROOT}/src/render/renderer.cpp
+    ${ORCMAP_ROOT}/src/render/clip.cpp
+    ${ORCMAP_ROOT}/adapters/host/framebuffer_target.cpp
+)
+target_include_directories(orcmap_screen_bounds_tests PRIVATE
+    ${ORCMAP_ROOT}/include ${ORCMAP_ROOT}/adapters/host)
+add_test(NAME orcmap_screen_bounds_tests COMMAND orcmap_screen_bounds_tests)
+add_executable(orcmap_tile_composition_tests test_tile_composition.cpp
+    ${ORCMAP_ROOT}/src/core/geo.cpp
+    ${ORCMAP_ROOT}/src/core/viewport.cpp
+    ${ORCMAP_ROOT}/src/render/style.cpp
+    ${ORCMAP_ROOT}/src/render/renderer.cpp
+    ${ORCMAP_ROOT}/src/render/clip.cpp
+    ${ORCMAP_ROOT}/adapters/host/framebuffer_target.cpp)
+target_include_directories(orcmap_tile_composition_tests PRIVATE
+    ${ORCMAP_ROOT}/include ${ORCMAP_ROOT}/adapters/host)
+add_test(NAME orcmap_tile_composition_tests COMMAND orcmap_tile_composition_tests)
 add_test(
     NAME orcmap_host_tests
     COMMAND orcmap_host_tests ${ORCMAP_ROOT}/tests/fixtures/tiny.pmtiles
