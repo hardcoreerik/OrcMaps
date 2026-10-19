@@ -34,7 +34,7 @@ class CatalogTests(unittest.TestCase):
         self.spec = {
             "schema": "orcmaps-catalog-input-v1", "revision": 1,
             "generated_at": "2026-10-19T00:00:00Z", "expires_at": "2026-11-19T00:00:00Z",
-            "packs": [{"manifest": "world.manifest.json",
+            "packs": [{"product_id": "global-regional", "manifest": "world.manifest.json",
                        "urls": [f"https://maps.example.test/{self.digest}/world.pmtiles"]}],
         }
 
@@ -48,6 +48,7 @@ class CatalogTests(unittest.TestCase):
         result = self.build()
         self.assertEqual(result["schema"], "orcmaps-catalog-v1")
         self.assertEqual(result["packs"][0]["manifest"], self.manifest)
+        self.assertEqual(result["packs"][0]["product_id"], "global-regional")
         self.assertEqual(result["packs"][0]["archive"]["sha256"], self.digest)
         self.assertNotIn("destination", result["packs"][0]["archive"])
         self.assertEqual(CATALOG.encode(result), CATALOG.encode(copy.deepcopy(result)))
@@ -76,6 +77,24 @@ class CatalogTests(unittest.TestCase):
     def test_duplicate_pack_identity_is_rejected(self):
         self.spec["packs"] *= 2
         with self.assertRaises(ValueError):
+            self.build()
+
+    def test_product_identity_is_explicit_bounded_and_unique(self):
+        for product in ("", "../manual", "UPPER", "a"*64, None, 7):
+            spec = copy.deepcopy(self.spec)
+            spec["packs"][0]["product_id"] = product
+            with self.subTest(product=product), self.assertRaises(ValueError):
+                self.build(spec)
+        spec = copy.deepcopy(self.spec)
+        del spec["packs"][0]["product_id"]
+        with self.assertRaises(ValueError):
+            self.build(spec)
+        # Distinct artifacts for the same logical product must not coexist.
+        second = dict(self.manifest, pack_id="world-next-version")
+        (self.root/"next.manifest.json").write_text(json.dumps(second), encoding="utf-8")
+        (self.root/"next.pmtiles").write_bytes(self.archive.read_bytes())
+        self.spec["packs"].append(dict(self.spec["packs"][0], manifest="next.manifest.json"))
+        with self.assertRaisesRegex(ValueError, "duplicate product"):
             self.build()
 
     def test_revision_time_and_limits_are_checked(self):

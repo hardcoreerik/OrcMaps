@@ -115,10 +115,16 @@ def assemble(spec: dict, root: Path, verify_directory) -> dict:
         raise ValueError("catalog requires 1–32 packs")
     result = {key: spec[key] for key in ("revision", "generated_at", "expires_at")}
     result.update(schema="orcmaps-catalog-v1", packs=[])
-    checked, identities = set(), set()
+    checked, identities, products = set(), set(), set()
     for entry in packs:
-        if not isinstance(entry, dict) or set(entry) != {"manifest", "urls"}:
-            raise ValueError("pack requires only manifest path and URLs")
+        if not isinstance(entry, dict) or set(entry) != {"product_id", "manifest", "urls"}:
+            raise ValueError("pack requires only product_id, manifest path and URLs")
+        product = entry["product_id"]
+        if not isinstance(product, str) or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,62}", product):
+            raise ValueError("product_id requires a bounded lowercase ASCII identifier")
+        if product in products:
+            raise ValueError("duplicate product identity")
+        products.add(product)
         manifest_path = (root / entry["manifest"]).resolve()
         if not manifest_path.name.endswith(".manifest.json"):
             raise ValueError("manifest filename must end in .manifest.json")
@@ -153,7 +159,7 @@ def assemble(spec: dict, root: Path, verify_directory) -> dict:
         if manifest_path.parent not in checked:
             verify_directory(manifest_path.parent)
             checked.add(manifest_path.parent)
-        result["packs"].append({"manifest": manifest,
+        result["packs"].append({"product_id": product, "manifest": manifest,
                                 "archive": {"urls": urls, "bytes": size, "sha256": digest}})
     result["packs"].sort(key=lambda entry: entry["manifest"]["pack_id"])
     encode(result)  # Enforce the device payload limit before producing anything.

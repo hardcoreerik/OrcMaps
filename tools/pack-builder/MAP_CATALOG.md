@@ -14,6 +14,7 @@ Input example (replace the hash, paths and URL with verified release values):
   "generated_at": "2026-10-19T00:00:00Z",
   "expires_at": "2026-11-19T00:00:00Z",
   "packs": [{
+    "product_id": "global-regional",
     "manifest": "world.manifest.json",
     "urls": ["https://maps.example.test/FULL_LOWERCASE_SHA256/world.pmtiles"]
   }]
@@ -26,6 +27,21 @@ include the archive's actual SHA-256 as a complete path segment, and omit
 credentials, query strings and fragments. Four mirrors and 32 packs are the
 limits. URL naming alone cannot guarantee that a server never changes data;
 the download's expected hash remains mandatory.
+
+Each entry requires a unique stable `product_id`, such as `global-regional`.
+It starts with a lowercase ASCII letter/digit and contains up to 63 lowercase
+letters, digits, dots, underscores or hyphens. It identifies the product across
+artifact versions: preserve it when the snapshot/pack identity/hash changes.
+Never reuse it for an unrelated product. Devices use explicit catalog ownership
+to retire only a previously managed version, never a matching display name or
+an arbitrary manually imported map. One catalog cannot contain two versions of
+the same product. The emitted signed entry includes this field alongside its
+manifest and archive metadata.
+
+This remains an unpublished v1 contract. Earlier local test-only payloads that
+lack `product_id` must be regenerated; they are deliberately rejected rather
+than guessing update ownership. PMTiles and engine pack-manifest formats are
+unchanged. No production catalog, signing key or public endpoint is configured.
 Version 1 uses DNS hostnames (or IPv4 text), port 443, and plain ASCII paths
 containing letters, digits, `/`, `-`, `.`, `_`, `~`. Percent-encoded paths and
 IPv6 literals are outside this initial contract. UTC dates start at 1970.
