@@ -142,7 +142,8 @@ candidates). Neither is final. Do not finalize OpenMapTiles, Shortbread,
   — FeatureTile → ResolveFeatureStyle → Viewport → pixels, no M5GFX.
   Unclassified features skipped. Every ring of a polygon is filled even-odd,
   so multipolygon parts are all drawn and holes are subtracted.
-- Host test suite: **180 test functions, all passing**.
+- Host test suite: **182 test functions** across the host sources; all seven
+  configured CTest programs pass at the map-quality development checkpoint.
 - `EnumerateVisibleTiles` (unique TileIds, X wrap, Y clamp).
   `TileScreenMap` uses shortest wrapped X delta. Overzoom still rejected.
 - `RenderTarget::DrawLine` takes `width_px` from `MapPaint`. Shared
@@ -268,12 +269,13 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Result as of this writing: `100% tests passed, 0 tests failed out of 1`
-(one `ctest` entry, `orcmap_host_tests`, itself running 180 test functions
-covering geo math, PMTiles, style, attribution, MVT, Feature/MVT
-translation, Viewport, clip, host render, compression, and experimental
-OpenMapTiles-like classification — see `ARCHITECTURE.md`
-"Testing architecture").
+Latest map-quality checkpoint: `100% tests passed, 0 tests failed out of 7`.
+There are 182 test functions defined across `tests/host/test_*.cpp`, distributed
+among the general host and focused CTest programs. These cover geo math,
+PMTiles, style, attribution, MVT translation, viewport/clip/render/compression,
+profiles, labels, frame transforms and pack discovery. Separately configured
+font-backend tests are not included in that seven-program run. See
+`docs/evidence/2026-10-18-protomaps-pack-compatibility.md` for commands and logs.
 
 LilyGO hardware-demo build:
 
