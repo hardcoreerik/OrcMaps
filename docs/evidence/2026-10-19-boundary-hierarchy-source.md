@@ -65,18 +65,45 @@ the worktree root. Source inspection confirms all four built-in constructors
 invoke `ApplyStandardZoomGating`, which supplies the 0/4/6 boundary policy;
 the focused tests exercise visibility thresholds and style versions for all four.
 
+## Approved complete configured host regression
+
+The subsequent approved regression used exact source
+`3d9d01c607e6504ba18049a46ef2fe25ded5221a`; tracked state was clean before
+the build. From the same worktree invocation directory, using WSL:
+
+```sh
+cmake --build .local/boundary-host-20261019 -j2
+ctest --test-dir .local/boundary-host-20261019 --output-on-failure
+```
+
+One default-target build and one CTest run completed successfully. **7/7 tests
+passed, zero failures** (CTest 0.23 seconds): `orcmap_pack_tests`,
+`orcmap_frame_transform_tests`, `orcmap_label_tests`, `orcmap_profile_tests`,
+`orcmap_screen_bounds_tests`, `orcmap_tile_composition_tests` and
+`orcmap_host_tests`. The latter now compiles and executes the added boundary
+direct/screen-cache pixel parity test and style tests.
+
+Logs in the invocation directory:
+
+- `boundary-full-host-build-3d9d01c-20261019.log`
+- `boundary-full-host-tests-3d9d01c-20261019.log`
+
+This is the complete configured CMake/CTest set, not optional real-font builds,
+Python suites, real-global-archive acceptance or native/device testing. Those
+were not run by this regression approval. No failure required a retry.
+
 ## Remaining gates
 
 Focused style tests pass for hierarchy gating/widths/colors, preserved enum
 identities and style-version cache invalidation; existing Night Red iteration
-also includes new rules. The broader host executable was outside this approval.
+also includes new rules. They also passed in the subsequent full configured run.
 `TestScreenFeatureMatchesDirectRender` now includes all three new categories as
 separate visible stroked lines in its direct-with-scratch versus projected
 screen-cache pixel comparison. Only the test's local style copy lowers their
 minimum zoom to 0; production gating is unchanged. It asserts actual pixels for
-each category as well as pixel equality. **This parity test was added but has not
-been compiled or run.** Even a passing synthetic parity test would not establish
-real-archive streaming acceptance.
-Immediate/streamed/cached pixel agreement, eight full worldwide viewport
-comparisons, broader shared-engine regressions, adapter/native builds, active-RF
-performance and physical readability remain unverified. No device was accessed.
+each category as well as pixel equality. **This parity test compiled and passed
+in the subsequent configured host run.** Passing synthetic parity does not
+establish real-archive streaming acceptance. Eight full worldwide viewport
+comparisons, real-archive streaming acceptance, adapter/native builds, active-RF
+performance and physical readability remain unverified. No device was accessed
+by these source and host checks.
