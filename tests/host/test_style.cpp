@@ -95,9 +95,9 @@ void TestAdministrativeBoundaryHierarchy() {
     ORCMAP_EXPECT_TRUE(region.color != orcmap::Color{});
     ORCMAP_EXPECT_TRUE(local.color != orcmap::Color{});
     ORCMAP_EXPECT_TRUE(orcmap::ResolveFeatureStyle(K::kBoundary, 0, style).visible);
-    ORCMAP_EXPECT_TRUE(style.version == 2);
+    ORCMAP_EXPECT_TRUE(style.version == 3);
     auto previous = style;
-    previous.version = 1;
+    previous.version = 2;
     ORCMAP_EXPECT_TRUE(
         orcmap::RenderedTileCacheKey::Make("global", 6, 10, 20, style) !=
         orcmap::RenderedTileCacheKey::Make("global", 6, 10, 20, previous));

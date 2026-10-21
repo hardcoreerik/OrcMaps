@@ -111,6 +111,16 @@ add_executable(orcmap_tile_composition_tests test_tile_composition.cpp
 target_include_directories(orcmap_tile_composition_tests PRIVATE
     ${ORCMAP_ROOT}/include ${ORCMAP_ROOT}/adapters/host)
 add_test(NAME orcmap_tile_composition_tests COMMAND orcmap_tile_composition_tests)
+add_executable(orcmap_paint_order_tests test_paint_order.cpp
+    ${ORCMAP_ROOT}/src/core/geo.cpp
+    ${ORCMAP_ROOT}/src/core/viewport.cpp
+    ${ORCMAP_ROOT}/src/render/style.cpp
+    ${ORCMAP_ROOT}/src/render/renderer.cpp
+    ${ORCMAP_ROOT}/src/render/clip.cpp
+    ${ORCMAP_ROOT}/adapters/host/framebuffer_target.cpp)
+target_include_directories(orcmap_paint_order_tests PRIVATE
+    ${ORCMAP_ROOT}/include ${ORCMAP_ROOT}/adapters/host)
+add_test(NAME orcmap_paint_order_tests COMMAND orcmap_paint_order_tests)
 add_test(
     NAME orcmap_host_tests
     COMMAND orcmap_host_tests ${ORCMAP_ROOT}/tests/fixtures/tiny.pmtiles

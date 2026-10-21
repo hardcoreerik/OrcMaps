@@ -49,7 +49,7 @@ MapStyle BuildOrcSdrDark() {
   MapStyle s;
   s.id = "orcsdr-dark";
   s.display_name = "OrcSDR Dark";
-  s.version = 2;
+  s.version = 3;
   s.label_scale = 1.0f;
   s.label_priority_threshold = 0;
 
@@ -90,7 +90,7 @@ MapStyle BuildStandardLight() {
   MapStyle s;
   s.id = "standard-light";
   s.display_name = "Standard Light";
-  s.version = 2;
+  s.version = 3;
   s.label_scale = 1.0f;
 
   // Conventional daytime cartography -- OrcMaps' generic, application-
@@ -127,7 +127,7 @@ MapStyle BuildHighContrastField() {
   MapStyle s;
   s.id = "high-contrast-field";
   s.display_name = "High Contrast / Field";
-  s.version = 2;
+  s.version = 3;
   s.label_scale = 1.3f;  // Larger labels, per docs/STYLING.md.
   s.label_priority_threshold = 2;  // Only higher-priority labels draw.
 
@@ -170,7 +170,7 @@ MapStyle BuildNightRedSafe() {
   MapStyle s;
   s.id = "night-red-safe";
   s.display_name = "Night / Red-Safe";
-  s.version = 2;
+  s.version = 3;
   s.label_scale = 1.0f;
 
   // Dark-adaptation-preserving: black background, deep reds only, no
