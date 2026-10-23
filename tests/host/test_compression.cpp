@@ -15,7 +15,6 @@
 #include <iterator>
 #include <string>
 #include <algorithm>
-#include <cstdlib>
 #include <vector>
 
 #include "test_util.hpp"
@@ -213,8 +212,7 @@ bool CaptureParsed(const orcmap::Feature& feature, void* ctx) {
 // and it must produce exactly what decode-then-translate produced -- if the
 // two diverged, a board with PSRAM and a board without would draw different
 // maps from the same pack.
-void TestStreamedParseMatchesBufferedDecode(const std::string& gzip_pmtiles,
-    uint8_t z=0, uint32_t x=0, uint32_t y=0, const char* profile="openmaptiles-3.16") {
+void TestStreamedParseMatchesBufferedDecode(const std::string& gzip_pmtiles) {
   orcmap::host::FileByteSource source(gzip_pmtiles);
   ORCMAP_EXPECT_TRUE(source.Valid());
   orcmap::PmTilesReader reader(&source);
@@ -222,7 +220,7 @@ void TestStreamedParseMatchesBufferedDecode(const std::string& gzip_pmtiles,
 
   // Reference: inflate whole, decode whole, translate whole.
   std::vector<uint8_t> raw;
-  ORCMAP_EXPECT_TRUE(reader.GetTileInflated(z, x, y, 1u << 20, &raw));
+  ORCMAP_EXPECT_TRUE(reader.GetTileInflated(0, 0, 0, 1u << 20, &raw));
   orcmap::MvtTile buffered;
   ORCMAP_EXPECT_TRUE(orcmap::DecodeMvtTile(raw.data(), raw.size(), &buffered));
   orcmap::FeatureTile translated;
@@ -232,77 +230,51 @@ void TestStreamedParseMatchesBufferedDecode(const std::string& gzip_pmtiles,
 
   uint64_t offset = 0;
   uint32_t length = 0;
-  ORCMAP_EXPECT_TRUE(reader.LocateTileForTest(z, x, y, &offset, &length));
+  ORCMAP_EXPECT_TRUE(reader.LocateTileForTest(0, 0, 0, &offset, &length));
   const auto pull = [](void* ctx, uint64_t off, uint8_t* dst,
                        size_t len) -> size_t {
     return static_cast<orcmap::ByteSource*>(ctx)->Read(off, dst, len);
   };
 
-  // Pixel reference is the complete decode/translate path, not the new buffer.
-  auto reference = translated;
-  for(auto& feature:reference.features)
-    feature.kind_assigned=orcmap::experimental::TryClassifyFeatureForProfile(profile,feature,&feature.kind);
-  orcmap::Viewport view;
-  view.width_px=842;view.height_px=330;view.zoom=z;
-  view.center_lat_deg=z?44.0628866:0;view.center_lon_deg=z?-123.0160273:0;
-  orcmap::host::FramebufferTarget expected_pixels(842,330);
-  ORCMAP_EXPECT_TRUE(orcmap::ClearMapBackground(view,orcmap::styles::OrcSdrDark(),&expected_pixels));
-  ORCMAP_EXPECT_TRUE(orcmap::RenderFeatureTile(reference,{z,x,y},view,orcmap::styles::OrcSdrDark(),&expected_pixels));
-
   ParseCapture cap;
-  orcmap::MvtStreamScratch scratch;
   orcmap::MvtStreamOptions options;
-  for (size_t limit : {size_t(0), orcmap::kMaxBufferedTileBytes, raw.size()-1}) {
-    cap.features.clear();
-    options.feature_sink = &CaptureParsed;
-    options.feature_sink_ctx = &cap;
-    options.max_buffered_tile_bytes = limit;
-    ORCMAP_EXPECT_TRUE(orcmap::StreamMvtTile(reader.Header().tile_compression,
-                                             pull, &source, offset, length,
-                                             options, &scratch));
-    ORCMAP_EXPECT_TRUE(scratch.buffered_tile_used == (limit >= raw.size()));
-    ORCMAP_EXPECT_TRUE(scratch.inflated_tile.capacity() <= orcmap::kMaxBufferedTileBytes);
+  options.feature_sink = &CaptureParsed;
+  options.feature_sink_ctx = &cap;
+  orcmap::MvtStreamScratch scratch;
+  ORCMAP_EXPECT_TRUE(orcmap::StreamMvtTile(reader.Header().tile_compression,
+                                           pull, &source, offset, length,
+                                           options, &scratch));
 
-    ORCMAP_EXPECT_EQ(static_cast<int>(cap.features.size()),
-                     static_cast<int>(translated.features.size()));
-    for (size_t i = 0; i < translated.features.size(); ++i) {
-      const orcmap::Feature& want = translated.features[i];
-      const orcmap::Feature& got = cap.features[i];
-      ORCMAP_EXPECT_TRUE(got.id == want.id);
-      ORCMAP_EXPECT_EQ(got.layer, want.layer);
-      ORCMAP_EXPECT_TRUE(got.extent == want.extent);
-      ORCMAP_EXPECT_TRUE(got.geometry.type == want.geometry.type);
-      ORCMAP_EXPECT_EQ(static_cast<int>(got.geometry.paths.size()),
-                       static_cast<int>(want.geometry.paths.size()));
-      for (size_t r = 0; r < want.geometry.paths.size(); ++r) {
-        ORCMAP_EXPECT_EQ(static_cast<int>(got.geometry.paths[r].size()),
-                         static_cast<int>(want.geometry.paths[r].size()));
-        for (size_t k = 0; k < want.geometry.paths[r].size(); ++k) {
-          ORCMAP_EXPECT_TRUE(got.geometry.paths[r][k].x ==
-                             want.geometry.paths[r][k].x);
-          ORCMAP_EXPECT_TRUE(got.geometry.paths[r][k].y ==
-                             want.geometry.paths[r][k].y);
-        }
-      }
-      // Attributes prove two-pass table resolution: these indices are only
-      // resolvable because pass 1 collected keys/values that the wire format
-      // places AFTER the features referencing them.
-      ORCMAP_EXPECT_TRUE(got.property_keys == want.property_keys);
-      ORCMAP_EXPECT_EQ(static_cast<int>(got.property_values.size()),
-                       static_cast<int>(want.property_values.size()));
-      for (size_t v = 0; v < want.property_values.size(); ++v) {
-        ORCMAP_EXPECT_TRUE(got.property_values[v] == want.property_values[v]);
+  ORCMAP_EXPECT_EQ(static_cast<int>(cap.features.size()),
+                   static_cast<int>(translated.features.size()));
+  for (size_t i = 0; i < translated.features.size(); ++i) {
+    const orcmap::Feature& want = translated.features[i];
+    const orcmap::Feature& got = cap.features[i];
+    ORCMAP_EXPECT_TRUE(got.id == want.id);
+    ORCMAP_EXPECT_EQ(got.layer, want.layer);
+    ORCMAP_EXPECT_TRUE(got.extent == want.extent);
+    ORCMAP_EXPECT_TRUE(got.geometry.type == want.geometry.type);
+    ORCMAP_EXPECT_EQ(static_cast<int>(got.geometry.paths.size()),
+                     static_cast<int>(want.geometry.paths.size()));
+    for (size_t r = 0; r < want.geometry.paths.size(); ++r) {
+      ORCMAP_EXPECT_EQ(static_cast<int>(got.geometry.paths[r].size()),
+                       static_cast<int>(want.geometry.paths[r].size()));
+      for (size_t k = 0; k < want.geometry.paths[r].size(); ++k) {
+        ORCMAP_EXPECT_TRUE(got.geometry.paths[r][k].x ==
+                           want.geometry.paths[r][k].x);
+        ORCMAP_EXPECT_TRUE(got.geometry.paths[r][k].y ==
+                           want.geometry.paths[r][k].y);
       }
     }
-
-    orcmap::FeatureTile actual;actual.features=cap.features;
-    for(auto& feature:actual.features)
-      feature.kind_assigned=orcmap::experimental::TryClassifyFeatureForProfile(profile,feature,&feature.kind);
-    orcmap::host::FramebufferTarget actual_pixels(842,330);
-    ORCMAP_EXPECT_TRUE(orcmap::ClearMapBackground(view,orcmap::styles::OrcSdrDark(),&actual_pixels));
-    ORCMAP_EXPECT_TRUE(orcmap::RenderFeatureTile(actual,{z,x,y},view,orcmap::styles::OrcSdrDark(),&actual_pixels));
-    ORCMAP_EXPECT_TRUE(actual_pixels.Pixels()==expected_pixels.Pixels());
-
+    // Attributes prove two-pass table resolution: these indices are only
+    // resolvable because pass 1 collected keys/values that the wire format
+    // places AFTER the features referencing them.
+    ORCMAP_EXPECT_TRUE(got.property_keys == want.property_keys);
+    ORCMAP_EXPECT_EQ(static_cast<int>(got.property_values.size()),
+                     static_cast<int>(want.property_values.size()));
+    for (size_t v = 0; v < want.property_values.size(); ++v) {
+      ORCMAP_EXPECT_TRUE(got.property_values[v] == want.property_values[v]);
+    }
   }
 
   // Reusing the scratch must give the same answer, which is how the embedded
@@ -315,27 +287,6 @@ void TestStreamedParseMatchesBufferedDecode(const std::string& gzip_pmtiles,
   ORCMAP_EXPECT_EQ(static_cast<int>(again.features.size()),
                    static_cast<int>(translated.features.size()));
 
-  // Buffered parsing rejects corrupt gzip before emitting any feature.
-  std::vector<uint8_t> corrupt;
-  ORCMAP_EXPECT_TRUE(reader.GetTile(z, x, y, &corrupt));
-  ORCMAP_EXPECT_TRUE(corrupt.size() >= 18);
-  corrupt[corrupt.size()-8] ^= 1;  // CRC, not ISIZE
-  const auto memory_pull = [](void* ctx, uint64_t off, uint8_t* dst, size_t n) -> size_t {
-    const auto& bytes = *static_cast<std::vector<uint8_t>*>(ctx);
-    if (off > bytes.size() || n > bytes.size()-off) return 0;
-    std::copy_n(bytes.data()+off,n,dst);return n;
-  };
-  ParseCapture bad;
-  options.max_buffered_tile_bytes = orcmap::kMaxBufferedTileBytes;
-  options.feature_sink_ctx = &bad;
-  ORCMAP_EXPECT_TRUE(!orcmap::StreamMvtTile(orcmap::Compression::kGzip,
-      memory_pull,&corrupt,0,corrupt.size(),options,&scratch));
-  ORCMAP_EXPECT_TRUE(bad.features.empty());
-  ORCMAP_EXPECT_TRUE(!scratch.buffered_tile_used);
-  const auto short_pull = [](void*,uint64_t,uint8_t*,size_t) -> size_t {return 0;};
-  ORCMAP_EXPECT_TRUE(!orcmap::StreamMvtTile(orcmap::Compression::kGzip,
-      short_pull,nullptr,0,corrupt.size(),options,&scratch));
-
   // A refusing sink aborts rather than truncating silently.
   struct Refuse {
     static bool Sink(const orcmap::Feature&, void* ctx) {
@@ -347,7 +298,6 @@ void TestStreamedParseMatchesBufferedDecode(const std::string& gzip_pmtiles,
   orcmap::MvtStreamOptions refusing;
   refusing.feature_sink = &Refuse::Sink;
   refusing.feature_sink_ctx = &calls;
-  refusing.max_buffered_tile_bytes = orcmap::kMaxBufferedTileBytes;
   ORCMAP_EXPECT_TRUE(!orcmap::StreamMvtTile(reader.Header().tile_compression,
                                             pull, &source, offset, length,
                                             refusing, &scratch));
@@ -466,10 +416,4 @@ void RunCompressionTests(const std::string& pmtiles_path,
   TestStreamingInflateMatchesTwoStep(gzip_pmtiles);
   TestInflatingStreamMatchesBufferedInflate(gzip_pmtiles);
   TestStreamedParseMatchesBufferedDecode(gzip_pmtiles);
-  if(const char* archive=std::getenv("ORCMAP_BUFFERED_TILE_TEST_ARCHIVE")) {
-    TestStreamedParseMatchesBufferedDecode(archive,0,0,0,"protomaps-v4");
-    for(uint32_t x:{40u,41u})for(uint32_t y:{92u,93u})
-      TestStreamedParseMatchesBufferedDecode(archive,8,x,y,"protomaps-v4");
-    std::printf("BUFFERED_GLOBAL_EQUIVALENCE views=5 failures=%d\n",orcmap::test::g_failures);
-  }
 }

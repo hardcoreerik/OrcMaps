@@ -1,5 +1,21 @@
 # Optional single-tile inflate experiment — October 23, 2026
 
+> **Withdrawn after COM17 measurement.** The optional API described below is
+> historical experiment7ed0d32, not part of the current engine API. OrcSDR
+> candidate3fcd29e3 did not demonstrate a hardware benefit: an initial completed
+> frame took7.88s and a subsequent quiescent frame8.46s, versus the accepted
+> baseline's20-pan p50/p95/max3.65/4.55/5.13s. Seven-second samples repeatedly
+> found the worker busy; that candidate run was aborted rather than reporting
+> invalid percentiles. Live radio/startup conditions vary, so this is not an
+> isolated causal speed comparison. It is sufficient reason not to ship it.
+>
+> No reset or reported RF drop/overrun occurred. The actual256KiB optional
+> buffer was used, and native reclaim released exactly1,635,728bytes for the
+> canvas, preview, read cache and inflate buffer. Accepted firmware restoration
+> is documented by OrcSDR. The experiment's source, artifacts and logs remain
+> available in history; the production review no longer adds this API.
+
+
 Prepared against b59d478 on codex/map-quality-delivery. No version/tag, engine
 publication, OrcSDR dependency change or device flash is included.
 

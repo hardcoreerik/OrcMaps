@@ -1,9 +1,6 @@
 #include "orcmap/mvt_stream.hpp"
 
 #include <utility>
-#include <algorithm>
-#include <cstring>
-#include <new>
 
 #include "mvt_internal.hpp"
 
@@ -174,7 +171,6 @@ bool StreamMvtTile(Compression compression, CompressedChunkReader reader,
                    const MvtStreamOptions& options,
                    MvtStreamScratch* scratch) {
   if (scratch == nullptr || options.feature_sink == nullptr) return false;
-  scratch->buffered_tile_used = false;
 
   // Trim on EVERY exit, including a failed tile and a thrown bad_alloc.
   //
@@ -203,53 +199,6 @@ bool StreamMvtTile(Compression compression, CompressedChunkReader reader,
       std::vector<MvtStreamScratch::LayerTables>().swap(scratch->layers);
     }
   } trim{scratch};
-
-#if defined(__cpp_exceptions)
-  const size_t limit = std::min(options.max_buffered_tile_bytes,
-                                kMaxBufferedTileBytes);
-  if (limit != 0 && compression == Compression::kGzip && reader != nullptr &&
-      input_size >= 18) {
-    uint8_t trailer[4];
-    if (reader(ctx, input_offset + input_size - 4, trailer, sizeof(trailer)) !=
-        sizeof(trailer)) return false;
-    const uint32_t size = uint32_t(trailer[0]) | uint32_t(trailer[1]) << 8 |
-        uint32_t(trailer[2]) << 16 | uint32_t(trailer[3]) << 24;
-    if (size != 0 && size <= limit) {
-      bool available = false;
-      try {
-        // Reserve the explicit ceiling to avoid resize's geometric growth
-        // retaining more than that ceiling across differently sized tiles.
-        scratch->inflated_tile.reserve(limit);
-        // This verifies gzip size/CRC before exposing any feature to the sink.
-        // Failure is malformed input, not a reason to retry a weaker parser.
-        if (!DecompressStreaming(compression, reader, ctx, input_offset,
-                                 input_size, limit, &scratch->inflated_tile))
-          return false;
-        available = true;
-      } catch (const std::bad_alloc&) {
-        // The optimization must not prevent the original streaming fallback.
-        std::vector<uint8_t>().swap(scratch->inflated_tile);
-      }
-      if (available) {
-        const auto memory_reader = [](void* opaque, uint64_t offset,
-                                      uint8_t* dst, size_t count) -> size_t {
-          const auto& bytes = *static_cast<std::vector<uint8_t>*>(opaque);
-          if (offset > bytes.size() || count > bytes.size() - offset) return 0;
-          std::memcpy(dst, bytes.data() + static_cast<size_t>(offset), count);
-          return count;
-        };
-        MvtStreamOptions unbuffered = options;
-        unbuffered.max_buffered_tile_bytes = 0;
-        const bool ok = StreamMvtTile(Compression::kNone, memory_reader,
-            &scratch->inflated_tile, 0, scratch->inflated_tile.size(),
-            unbuffered, scratch);
-        scratch->buffered_tile_used = true;
-        return ok;
-      }
-    }
-  }
-
-#endif
 
   scratch->layers.clear();
 
