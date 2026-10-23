@@ -17,6 +17,8 @@ class FeatureReplay {
   // Reuses caller scratch; a false sink result cancels immediately. Allocation
   // exceptions are handled by the caller, as for a streaming feature sink.
   bool Replay(Feature& scratch, StreamedFeatureSink sink, void* context) const;
+  // Compact a caller-owned arena; overlapping source/destination is allowed.
+  bool Relocate(uint8_t* storage, size_t capacity);
   void Clear() { size_ = count_ = 0; }
   size_t Size() const { return size_; }
   size_t Count() const { return count_; }

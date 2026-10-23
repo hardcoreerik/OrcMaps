@@ -52,6 +52,12 @@ int main() {
   assert(appended_without_allocation && replay.Count() == 1); const size_t bytes = replay.Size();
   Capture c; assert(replay.Replay(scratch, CaptureFeature, &c)); Equal(f, c.feature);
   assert(c.calls == 1 && std::signbit(std::get<double>(c.feature.property_values[6])));
+  std::array<uint8_t, 2048> moved{};
+  assert(!replay.Relocate(nullptr, bytes) && !replay.Relocate(moved.data(), bytes - 1));
+  assert(replay.Relocate(moved.data() + 1, moved.size() - 1));
+  assert(replay.Relocate(moved.data(), moved.size()));
+  c = {}; assert(replay.Replay(scratch, CaptureFeature, &c)); Equal(f, c.feature);
+  assert(replay.Relocate(buffer.data(), buffer.size()));
   // The owner can catch allocation failure before any incomplete feature is published.
   orcmap::Feature cold; c.calls = 0; bool caught = false;
   deny_allocation = true;

@@ -85,3 +85,30 @@ and archive/camera transitions, then run P4 placement/size and native timing.
 The required COM17 p95 refill remains two seconds; current installed 30a00ce1
 still has the failing 4.55-second baseline. Full host regressions/publication
 retain their separate approval boundaries. Neither main nor a device is changed.
+
+## Consumer preparation and arena compaction
+
+Added allocation-free Relocate(storage, capacity), using memmove to permit an
+overlapping move while compacting a caller-owned arena. Too-small/null targets
+leave the old replay intact. The focused core test covers relocation to a new
+buffer, overlapping relocation, rejected targets and subsequent exact replay.
+
+Command: cmake build/CTest above, with output
+maps-feature-replay-relocation-20261023.log; exit 0, 1/1. Consumer cache compaction
+also passes ASan/UBSan/leak checks in the integration worktree's
+maps-feature-cache-sanitized-20261023.log. No full suite is implied.
+
+The prepared OrcSDR consumer has a caller-owned 768 KiB PSRAM arena, external
+metadata, complete-tile publication, visible-tile eviction/compaction and normal
+streaming when storage is absent or exhausted. Integrated targeted host tests
+pass 2/2, including ten real-archive pan/label comparisons, boundary-crossing
+pans, cancellation recovery, tiny-arena fallback, detach/reclaim fallback and
+archive reopen invalidation. Reference warmed pans hit all six cached tiles;
+retained payload is 702,110 bytes. Host text-layout equality is checked in these
+consumer tests; the earlier direct-core comparison used actual FreeType glyphs.
+
+P4 syntax-only checks of Pipeline, map_service and the replay core pass using
+the local engine headers. They do not resolve OrcSDR's dependency pin, link a
+firmware or establish section placement/stack/memory/radio performance. Native
+validation remains gated on an approved development push and regenerated pin/
+lock. The source revision has not been published at this checkpoint.

@@ -158,4 +158,10 @@ bool FeatureReplay::Replay(Feature& scratch, StreamedFeatureSink sink, void* con
     if (!ReadFeature(reader, scratch) || !sink(scratch, context)) return false;
   return reader.pos == size_;
 }
+bool FeatureReplay::Relocate(uint8_t* storage, size_t capacity) {
+  if (!storage || capacity < size_) return false;
+  if (size_) std::memmove(storage, storage_, size_);
+  storage_ = storage; capacity_ = capacity;
+  return true;
+}
 }  // namespace orcmap
