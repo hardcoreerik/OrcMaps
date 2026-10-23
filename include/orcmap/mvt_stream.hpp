@@ -10,9 +10,10 @@
 
 namespace orcmap {
 
-// END-TO-END STREAMING MVT PARSE: reads a compressed tile straight out of an
-// archive and emits its features one at a time, without ever materialising
-// the inflated tile.
+// END-TO-END STREAMING MVT PARSE: by default reads a compressed tile straight
+// out of an archive and emits features without materialising the inflated tile.
+// PSRAM callers can opt into a bounded, single-tile buffer to avoid inflating
+// small tiles twice. No accumulated decoded-feature cache is created.
 //
 // Why this exists, in measured numbers. On a CYD 3.5" (ESP32-3248S035, no
 // PSRAM) the binding limit is the largest CONTIGUOUS free block, not total
@@ -55,6 +56,11 @@ struct MvtStreamOptions {
   void* include_layer_ctx = nullptr;
   StreamedFeatureSink feature_sink = nullptr;
   void* feature_sink_ctx = nullptr;
+  // Optional PSRAM-device acceleration: inflate a small gzip tile once, then
+  // resolve its two parse passes from that buffer. Zero preserves streaming.
+  // Capped at kMaxBufferedTileBytes; oversized tiles keep the streaming path.
+  // Requires C++ exceptions for allocation fallback; otherwise ignored.
+  size_t max_buffered_tile_bytes = 0;
 };
 
 // Reusable scratch. Allocate ONE of these and keep it: every buffer inside
@@ -80,7 +86,11 @@ struct MvtStreamScratch {
   // Packed tag/geometry command buffers, reused across features.
   std::vector<uint32_t> tags;
   std::vector<uint32_t> geometry;
+  std::vector<uint8_t> inflated_tile;  // at most kMaxBufferedTileBytes, reused
+  bool buffered_tile_used = false;     // result of the last parse attempt
 };
+
+inline constexpr size_t kMaxBufferedTileBytes = 256u * 1024u;
 
 // Refuses a single feature larger than this rather than growing without
 // bound on hostile input. The largest feature measured in this project's
