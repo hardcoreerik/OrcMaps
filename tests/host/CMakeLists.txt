@@ -64,6 +64,15 @@ target_include_directories(orcmap_host_tests PRIVATE
 )
 
 enable_testing()
+add_executable(orcmap_feature_replay_tests test_feature_replay.cpp
+    ${ORCMAP_ROOT}/src/tiles/feature_replay.cpp)
+target_include_directories(orcmap_feature_replay_tests PRIVATE ${ORCMAP_ROOT}/include)
+if(MSVC)
+  target_compile_options(orcmap_feature_replay_tests PRIVATE /UNDEBUG)
+else()
+  target_compile_options(orcmap_feature_replay_tests PRIVATE -UNDEBUG)
+endif()
+add_test(NAME orcmap_feature_replay_tests COMMAND orcmap_feature_replay_tests)
 add_executable(orcmap_pack_tests pack_main.cpp test_pack.cpp test_pack_discovery.cpp
     ${ORCMAP_ROOT}/src/core/geo.cpp ${ORCMAP_ROOT}/src/core/viewport.cpp
     ${ORCMAP_ROOT}/src/core/pack.cpp ${ORCMAP_ROOT}/src/core/pack_json.cpp

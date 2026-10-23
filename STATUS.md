@@ -142,8 +142,14 @@ candidates). Neither is final. Do not finalize OpenMapTiles, Shortbread,
   — FeatureTile → ResolveFeatureStyle → Viewport → pixels, no M5GFX.
   Unclassified features skipped. Every ring of a polygon is filled even-odd,
   so multipolygon parts are all drawn and holes are subtracted.
-- Host test suite: **183 test functions** across the host sources; all eight
-  configured CTest programs pass at the map-quality development checkpoint.
+- Host test suite: **183 test functions** across the host sources. Eight CTest
+  programs passed at the preceding map-quality checkpoint. The newly registered
+  ninth program tests caller-bounded feature replay; its focused run passes.
+  The complete nine-program suite has not yet been run.
+- Experimental `FeatureReplay` preserves geometry and properties in caller-owned
+  capped storage for repeated drawing without tile reinflation. It does not own
+  cache identity, eviction or device memory policy. OrcSDR integration and P4
+  speed/memory acceptance remain untested; no renderer speed claim is made.
 - `EnumerateVisibleTiles` (unique TileIds, X wrap, Y clamp).
   `TileScreenMap` uses shortest wrapped X delta. Overzoom still rejected.
 - `RenderTarget::DrawLine` takes `width_px` from `MapPaint`. Shared
