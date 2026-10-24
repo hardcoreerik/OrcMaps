@@ -65,6 +65,32 @@ bool ResolveDrawablePaint(const Feature& feature, const Viewport& viewport,
   return true;
 }
 
+bool FeatureMayReachClip(const Feature& feature, const TileScreenMap& map,
+                         const MapPaint& paint, const RenderTarget& target) {
+  // Tile clipping is optional in RenderTarget. Do not assume a legacy target
+  // accepted it; its reported clip is the conservative visible region.
+  const auto clip = target.ClipRect();
+  if (clip.width <= 0 || clip.height <= 0) return false;
+  bool have_point = false;
+  int32_t min_x = INT32_MAX, min_y = INT32_MAX, max_x = INT32_MIN, max_y = INT32_MIN;
+  for (const auto& path : feature.geometry.paths) for (const auto& p : path) {
+    have_point = true;
+    min_x = std::min(min_x, p.x); max_x = std::max(max_x, p.x);
+    min_y = std::min(min_y, p.y); max_y = std::max(max_y, p.y);
+  }
+  if (!have_point) return false;
+  int left, top, right, bottom;
+  ProjectLocal(map, min_x, min_y, &left, &top);
+  ProjectLocal(map, max_x, max_y, &right, &bottom);
+  // Retain brushes whose centerline is outside the clip. A spare pixel keeps
+  // endpoint rounding conservative; this never clips individual geometry.
+  const int pad = feature.geometry.type == GeomType::kLineString
+      ? RasterStrokeWidthPx(paint.width_px) / 2 + 1 : 1;
+  return int64_t(right) + pad >= clip.x && int64_t(bottom) + pad >= clip.y &&
+         int64_t(left) - pad < int64_t(clip.x) + clip.width &&
+         int64_t(top) - pad < int64_t(clip.y) + clip.height;
+}
+
 void RenderOneFeature(const Feature& feature, const TileScreenMap& map,
                       const Viewport& viewport, const MapStyle& style,
                       RenderTarget* target, std::vector<int>* poly_xy) {
@@ -431,6 +457,7 @@ bool RenderOrderedFeatureAt(const Feature& feature, const TilePlacement& placeme
   }
   MapPaint paint;
   if (!ResolveDrawablePaint(feature, viewport, style, &paint)) return true;
+  if (!FeatureMayReachClip(feature, scratch->render.map, paint, *target)) return true;
   const auto type = feature.geometry.type;
   if (type == GeomType::kPolygon) {
     RenderOneFeature(feature, scratch->render.map, viewport, style, target,

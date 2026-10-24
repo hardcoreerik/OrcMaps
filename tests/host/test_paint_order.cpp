@@ -189,6 +189,57 @@ void AllocationFailure() {
     ORCMAP_EXPECT_TRUE(Count(frame,style.Rule(FeatureKind::kMotorway).color)>0);
   }
 }
+void OffscreenFeatures() {
+  using namespace orcmap;
+  struct CountTarget : host::FramebufferTarget {
+    CountTarget():host::FramebufferTarget(64,64) {}
+    size_t polygons=0;
+    void FillPolygonRings(const int* xy,const size_t* counts,size_t rings,Color color) override {
+      ++polygons;host::FramebufferTarget::FillPolygonRings(xy,counts,rings,color);
+    }
+  } actual;
+  Viewport view;view.width_px=view.height_px=view.tile_size_px=64;
+  actual.SetClipRect({16,16,32,32});
+  host::FramebufferTarget expected(64,64);expected.SetClipRect({16,16,32,32});
+  const TilePlacement placement{{0,0,0},0};const auto& style=styles::OrcSdrDark();
+  auto outside=Land();outside.geometry.paths={{{0,0},{256,0},{256,256},{0,256}}};
+  OrderedRenderScratch queue;
+  ORCMAP_EXPECT_TRUE(RenderFeatureAt(outside,placement,view,style,&expected));
+  ORCMAP_EXPECT_TRUE(RenderOrderedFeatureAt(outside,placement,view,style,&actual,&queue));
+  ORCMAP_EXPECT_TRUE(FinishOrderedTile(&queue,&actual));
+  ORCMAP_EXPECT_TRUE(actual.Pixels()==expected.Pixels() && actual.polygons==0);
+  // Thick strokes may reach into the scissor with every vertex outside it.
+  for(float width:{1.0f,3.0f,7.5f,64.0f}) {
+    auto edge=Line(FeatureKind::kMotorway);edge.geometry.paths={{{960,1024},{960,3072}}};
+    auto varied=style;varied.rules[size_t(FeatureKind::kMotorway)].width_px=width;
+    queue.Reset();
+    ORCMAP_EXPECT_TRUE(RenderFeatureAt(edge,placement,view,varied,&expected));
+    ORCMAP_EXPECT_TRUE(RenderOrderedFeatureAt(edge,placement,view,varied,&actual,&queue));
+    ORCMAP_EXPECT_TRUE(FinishOrderedTile(&queue,&actual));
+    ORCMAP_EXPECT_TRUE(actual.Pixels()==expected.Pixels());
+  }
+  // A surrounding polygon must survive even though no vertex is on screen.
+  auto surround=Land();surround.geometry.paths={{{-8192,-8192},{12288,-8192},{12288,12288},{-8192,12288}}};
+  queue.Reset();
+  ORCMAP_EXPECT_TRUE(RenderFeatureAt(surround,placement,view,style,&expected));
+  ORCMAP_EXPECT_TRUE(RenderOrderedFeatureAt(surround,placement,view,style,&actual,&queue));
+  ORCMAP_EXPECT_TRUE(FinishOrderedTile(&queue,&actual));
+  ORCMAP_EXPECT_TRUE(actual.Pixels()==expected.Pixels() && actual.polygons==1);
+  struct LegacyTarget : host::FramebufferTarget {
+    LegacyTarget():host::FramebufferTarget(64,64) {}
+    bool SetClipRect(PixelRect) override {return false;}
+  } legacy_actual,legacy_expected;
+  // Buffered geometry can reach the framebuffer from an adjacent world copy.
+  // A target declining tile scissoring must retain its previous behavior.
+  auto point=Line(FeatureKind::kMotorway);point.geometry.type=GeomType::kPoint;
+  point.geometry.paths={{{-4096,2048}}};const TilePlacement adjacent{{0,0,0},1};
+  queue.Reset();
+  ORCMAP_EXPECT_TRUE(RenderFeatureAt(point,adjacent,view,style,&legacy_expected));
+  ORCMAP_EXPECT_TRUE(RenderOrderedFeatureAt(point,adjacent,view,style,&legacy_actual,&queue));
+  ORCMAP_EXPECT_TRUE(FinishOrderedTile(&queue,&legacy_actual));
+  ORCMAP_EXPECT_TRUE(legacy_actual.Pixels()==legacy_expected.Pixels());
+  ORCMAP_EXPECT_TRUE(Count(legacy_actual,style.Rule(FeatureKind::kMotorway).color)>0);
+}
 }
 int main() {
   BatchOrder();
@@ -196,6 +247,7 @@ int main() {
   LimitsAndCancellation();
   SkipAndInvalidInput();
   AllocationFailure();
+  OffscreenFeatures();
   std::printf("paint order: %s\n", orcmap::test::g_failures ? "FAIL" : "PASS");
   return orcmap::test::g_failures ? 1 : 0;
 }
