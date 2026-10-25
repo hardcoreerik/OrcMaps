@@ -117,4 +117,3 @@ Keep a real `generated_at` timestamp. Dated expiry values still must follow
 generation; missing or malformed expiry is rejected. Null requires consumer
 support: older OrcSDR firmware rejects it safely. This does not remove signature,
 revision or archive validation, or guarantee hosting availability.
-
