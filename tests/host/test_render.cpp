@@ -396,7 +396,16 @@ void TestRenderScratchMatchesFreshScratch() {
 // pixels across every geometry type, a multipolygon with a hole, and a stroked
 // (width > 1) line.
 void TestScreenFeatureMatchesDirectRender() {
-  const orcmap::MapStyle& style = orcmap::styles::OrcSdrDark();
+  orcmap::MapStyle style = orcmap::styles::OrcSdrDark();
+  // This zoom-0 parity fixture must exercise all boundary draw paths. Actual
+  // 0/4/6 visibility thresholds are covered separately by RunStyleTests().
+  const orcmap::FeatureKind boundaries[] = {
+      orcmap::FeatureKind::kBoundaryCountry,
+      orcmap::FeatureKind::kBoundaryRegion,
+      orcmap::FeatureKind::kBoundaryLocal};
+  for (auto kind : boundaries) {
+    style.rules[static_cast<size_t>(kind)].min_zoom = 0;
+  }
   const orcmap::Viewport vp = Z0Frame(64);
 
   orcmap::FeatureTile tile;
@@ -434,6 +443,21 @@ void TestScreenFeatureMatchesDirectRender() {
   thin.geometry.paths.push_back({orcmap::Point{100, 3000}, orcmap::Point{2000, 3400},
                                  orcmap::Point{3900, 2900}});
   tile.features.push_back(thin);
+
+  // Separate, visible lines ensure none of the new categories is silently
+  // skipped in both paths. Keep the existing ring/point/stroke coverage above.
+  int32_t boundary_y = 1792;
+  for (auto kind : boundaries) {
+    orcmap::Feature boundary;
+    boundary.kind = kind;
+    boundary.kind_assigned = true;
+    boundary.extent = 4096;
+    boundary.geometry.type = orcmap::GeomType::kLineString;
+    boundary.geometry.paths.push_back({orcmap::Point{256, boundary_y},
+                                        orcmap::Point{3840, boundary_y}});
+    tile.features.push_back(boundary);
+    boundary_y += 256;
+  }
 
   // A point feature, so the kPoint path is covered too.
   orcmap::Feature poi;
@@ -481,6 +505,16 @@ void TestScreenFeatureMatchesDirectRender() {
     }
   }
   ORCMAP_EXPECT_TRUE(differing == 0);
+  for (auto kind : boundaries) {
+    const auto color = style.Rule(kind).color;
+    bool visible = false;
+    for (int y = 0; y < 64; ++y) {
+      for (int x = 0; x < 64; ++x) {
+        if (direct.At(x, y) == color) visible = true;
+      }
+    }
+    ORCMAP_EXPECT_TRUE(visible);
+  }
 }
 
 }  // namespace

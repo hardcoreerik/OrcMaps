@@ -142,8 +142,14 @@ candidates). Neither is final. Do not finalize OpenMapTiles, Shortbread,
   — FeatureTile → ResolveFeatureStyle → Viewport → pixels, no M5GFX.
   Unclassified features skipped. Every ring of a polygon is filled even-odd,
   so multipolygon parts are all drawn and holes are subtracted.
-- Host test suite: **182 test functions** across the host sources; all seven
-  configured CTest programs pass at the map-quality development checkpoint.
+- Host test suite: **183 test functions** across the host sources. All nine CTest
+  programs passed at producer 2133547. The subsequent off-screen rejection
+  candidate passes three affected programs, a sanitized paint-order test and
+  sixteen complete-frame comparisons; its full regression run remains pending.
+- Experimental `FeatureReplay` preserves geometry and properties in caller-owned
+  capped storage for repeated drawing without tile reinflation. It does not own
+  cache identity, eviction or device memory policy. OrcSDR integration and P4
+  speed/memory acceptance remain untested; no renderer speed claim is made.
 - `EnumerateVisibleTiles` (unique TileIds, X wrap, Y clamp).
   `TileScreenMap` uses shortest wrapped X delta. Overzoom still rejected.
 - `RenderTarget::DrawLine` takes `width_px` from `MapPaint`. Shared
@@ -269,8 +275,8 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Latest map-quality checkpoint: `100% tests passed, 0 tests failed out of 7`.
-There are 182 test functions defined across `tests/host/test_*.cpp`, distributed
+Latest map-quality checkpoint: `100% tests passed, 0 tests failed out of 8`.
+There are 183 test functions defined across `tests/host/test_*.cpp`, distributed
 among the general host and focused CTest programs. These cover geo math,
 PMTiles, style, attribution, MVT translation, viewport/clip/render/compression,
 profiles, labels, frame transforms and pack discovery. Separately configured
