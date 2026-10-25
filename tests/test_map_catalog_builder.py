@@ -97,6 +97,21 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate product"):
             self.build()
 
+    def test_explicit_null_expiry_is_nonexpiring(self):
+        self.spec['expires_at'] = None
+        self.assertIsNone(self.build()['expires_at'])
+
+    def test_missing_or_invalid_expiry_is_not_nonexpiring(self):
+        for value in (0, False, '', 'never'):
+            with self.subTest(value=value):
+                spec = copy.deepcopy(self.spec)
+                spec['expires_at'] = value
+                with self.assertRaises(ValueError):
+                    self.build(spec)
+        del self.spec['expires_at']
+        with self.assertRaises(ValueError):
+            self.build()
+
     def test_revision_time_and_limits_are_checked(self):
         for key, value in (("revision", True), ("revision", 0), ("revision", 1.5),
                            ("expires_at", "2026-01-01T00:00:00Z"),

@@ -108,7 +108,8 @@ def assemble(spec: dict, root: Path, verify_directory) -> dict:
     revision = spec["revision"]
     if type(revision) is not int or not 1 <= revision <= MAX_REVISION:
         raise ValueError("revision must be a positive exact integer")
-    if timestamp(spec["expires_at"]) <= timestamp(spec["generated_at"]):
+    generated = timestamp(spec["generated_at"])
+    if spec["expires_at"] is not None and timestamp(spec["expires_at"]) <= generated:
         raise ValueError("expiry must follow generation time")
     packs = spec["packs"]
     if not isinstance(packs, list) or not 1 <= len(packs) <= 32:

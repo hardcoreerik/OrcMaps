@@ -110,3 +110,11 @@ available without depending on this catalog or hosting service.
 
 No production trust key, catalog endpoint, hosting provider or publication is
 chosen by this tool. Those require separate approval and device verification.
+# Nonexpiring catalogs
+
+Set the required `expires_at` field to JSON `null` for a catalog with no expiry.
+Keep a real `generated_at` timestamp. Dated expiry values still must follow
+generation; missing or malformed expiry is rejected. Null requires consumer
+support: older OrcSDR firmware rejects it safely. This does not remove signature,
+revision or archive validation, or guarantee hosting availability.
+
