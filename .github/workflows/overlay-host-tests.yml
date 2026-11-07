@@ -9,6 +9,13 @@ on:
       - 'CMakeLists.txt'
       - 'examples/generic-overlays/**'
       - '.github/workflows/overlay-host-tests.yml'
+      - 'STATUS.md'
+      - 'ARCHITECTURE.md'
+      - 'ROADMAP.md'
+      - 'CHANGELOG.md'
+      - 'PROJECT_TRUTH.md'
+      - 'README.md'
+      - 'docs/**'
   pull_request:
   workflow_dispatch:
 permissions:
@@ -17,7 +24,7 @@ jobs:
   host-and-consumer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Full host tests
         run: |
           cmake -S tests/host -B build-host -DCMAKE_BUILD_TYPE=Debug
@@ -36,8 +43,8 @@ jobs:
   documentation-and-provenance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
       - name: Documentation truth
@@ -56,7 +63,7 @@ jobs:
       matrix:
         target: [esp32p4, esp32s3]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Compile and link OrcMaps
         shell: bash
         run: |
