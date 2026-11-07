@@ -11,7 +11,8 @@ Consumers pin a release by its full commit SHA (`docs/ORCSDR_INTEGRATION.md`).
   object picking, and configurable marker, path, area and geodesic geometry.
 - Added host and external-consumer tests, demo and documentation.
 - v0.3.0 release pin unchanged; all 7 host and both external-consumer
-  tests passed in CI. ESP-IDF and hardware proof remain separate gates.
+  tests passed in CI; ESP-IDF 5.5.4 P4/S3 compile/link gates also passed.
+  Physical hardware rendering and touch remain unverified.
   Basemap restoration and alpha blending are not automatic.
 
 ## 0.3.0 - 2026-10-18

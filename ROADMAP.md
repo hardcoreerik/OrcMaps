@@ -326,7 +326,7 @@ changed is in `CHANGELOG.md`; the consumer contract is
 - [x] Portable rendering and an independent external-consumer test
 - [x] Standalone sandbox C++17 and sanitizer tests
 - [x] Full host and consumer suites verified on GitHub Actions (7+2 tests)
-- [ ] ESP-IDF compilation and link gates for P4 and S3 verified
+- [x] ESP-IDF 5.5.4 compile/link and miniz symbol gates pass on P4 and S3
 - [ ] ESP32-P4 hardware draw, touch, CPU and peak memory measured
 - [ ] Automatic dirty-region basemap restoration and alpha blending
 

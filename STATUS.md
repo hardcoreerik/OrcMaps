@@ -7,8 +7,9 @@ Last updated: 2026-11-07
 `feat/generic-geographic-overlays` now contains a standalone API supporting
 markers, geographic polylines, polygon rings/holes, circles, sectors, vectors,
 layers, and hit-testing. Sandbox C++17 and ASan/UBSan tests passed; GitHub Actions then passed all
-7 host CTest targets and both external-consumer tests. ESP-IDF and real
-hardware draw/touch/performance verification are still release gates. See `docs/OVERLAYS.md`.
+7 host CTest targets and both external-consumer tests. ESP-IDF 5.5.4 compile/link and miniz symbol checks passed for ESP32-P4
+and ESP32-S3. Physical draw/touch, CPU and peak-memory measurements are
+still release gates. See `docs/OVERLAYS.md`.
 
 ## Current development focus
 
