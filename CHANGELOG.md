@@ -5,6 +5,14 @@ OrcMaps follows semantic versioning with pre-1.0 discipline (see
 change, but only in a new minor version, and every such change is listed here.
 Consumers pin a release by its full commit SHA (`docs/ORCSDR_INTEGRATION.md`).
 
+## Unreleased - generic geographic overlays (2026-11-07)
+
+- Generic public overlay API, render pass, bounded scene/layer storage, opaque
+  object picking, and configurable marker, path, area and geodesic geometry.
+- Added host and external-consumer tests, demo and documentation.
+- No change to v0.3.0 release pin. Full existing suite and hardware testing
+  remain pending; basemap restoration and alpha compositing are not automatic.
+
 ## 0.3.0 - 2026-10-18
 
 Adds a second painting path that projects a feature once and then draws it any

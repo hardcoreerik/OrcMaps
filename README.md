@@ -52,6 +52,10 @@ Not production-ready: hardware demos remain static and labels are absent.
 FeatureKind mapping is
 experimental. See [`STATUS.md`](STATUS.md).
 
+Generic overlays (markers, polylines, polygons, circles, sectors, vectors,
+layers and hit testing) are available through `orcmap/overlay.hpp`.
+See [overlay documentation](docs/OVERLAYS.md).
+
 ## Design principles
 
 1. **Fully offline after provisioning.** The network may deliver packs, but is never part of runtime map operation. Missing detail uses another eligible local pack or reports unavailable; it is never fetched online.
@@ -73,7 +77,7 @@ src/core/              Geo math, Viewport, pack validation/catalog/resolution
 src/storage/           Reserved; ByteSource interface lives in include/orcmap/
 src/tiles/             PMTiles reader, MVT decoder, bounded gzip decompress, MVT→Feature translation
 src/render/            Style system + FeatureTile renderer (host proof)
-src/overlays/          Planned marker/polyline/polygon overlay primitives
+src/overlays/          Generic marker/path/region overlay primitives
 src/cache/             Planned bounded LRU tile caches
 adapters/host/         stdio ByteSource for host tests/tools
 adapters/m5gfx/include/orcmap/m5gfx/  Optional DisplayTarget headers (consumer supplies M5GFX)

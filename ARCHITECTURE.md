@@ -22,7 +22,7 @@ flowchart TD
     Core["Renderer core -- IMPLEMENTED (host proof)"]
     Host["Host framebuffer -- IMPLEMENTED"]
     M5["M5GFX DisplayTarget -- optional RenderTarget"]
-    Overlay["Overlay Layer -- NOT IMPLEMENTED"]
+    Overlay["Generic Overlay Scene -- implemented"]
     Display["Display"]
 
     Pack --> Source
@@ -71,7 +71,7 @@ mapping is EXPERIMENTAL, not the tile-content schema.
 | Renderer core | `include/orcmap/renderer.hpp`, `src/render/renderer.cpp`, `src/render/clip.cpp` | Implemented (host-proof: ClearMapBackground + per-tile RenderFeatureTile). Not a complete map engine. |
 | Host framebuffer | `adapters/host/framebuffer_target.{hpp,cpp}` | Implemented (host only; RGBA8 + optional PPM) |
 | M5GFX adapter | `adapters/m5gfx/include/orcmap/m5gfx/` | Implemented as `DisplayTarget`. Exported include path; no M5GFX link in core. |
-| Overlay primitives | `src/overlays/` | Not implemented (empty dir) |
+| Overlay primitives | `include/orcmap/overlay.hpp`, `src/overlays/overlay.cpp` | Generic shapes, bounded layers, picking. Hardware performance unmeasured. |
 | Tile/rendered-tile cache | `src/cache/` | Not implemented (empty dir); `RenderedTileCacheKey` shape exists in `include/orcmap/cache_key.hpp` |
 | Pack builder | `tools/pack-builder/` | PARTIAL: Springfield/97477 host pack script (Planetiler, not a runtime dep) |
 | Pack inspector | `tools/pack-inspect/` | Implemented (host). Uses `EnumerateVisibleTiles`. |
@@ -117,7 +117,7 @@ src/render/           style.cpp, renderer.cpp, clip.cpp (stroke.hpp is
 src/storage/          Empty -- reserved for any storage-layer logic beyond
                       the ByteSource interface itself (interface lives in
                       include/, not here).
-src/overlays/         Empty -- marker/polyline/polygon primitives, planned.
+src/overlays/         Generic markers, paths, regions and geographic geometry.
 src/cache/            Empty -- bounded LRU tile cache, planned.
 adapters/host/        file_byte_source.{hpp,cpp} -- stdio ByteSource;
                       framebuffer_target.{hpp,cpp} -- host RGBA8 RenderTarget.
@@ -391,10 +391,13 @@ path yet.
 
 ## Overlay system
 
-Not implemented (`src/overlays/` is empty). Intended primitives: marker,
-icon, text label, polyline, polygon, circle, route, track, waypoint — all
-generic, all ignorant of what an application's data means. See
-`PROJECT_TRUTH.md` "Map Data vs Rendering vs Overlay Separation".
+`OverlayScene` owns application-supplied geographic objects in independent
+layers. `RenderOverlays` uses the existing `Viewport` and `RenderTarget` with
+screen clipping. `HitTestOverlays` returns opaque layer/object IDs in reverse
+draw order. All shape categories and storage limits are documented in
+`docs/OVERLAYS.md`. Overlays do not clear or restore basemap pixels; the
+caller recomposes affected map areas after an update. No application domain
+state, text/icon asset system or background threads are introduced.
 
 ## Cache architecture
 

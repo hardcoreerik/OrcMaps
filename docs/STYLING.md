@@ -114,9 +114,8 @@ Base map style   (this document)
         |
 Rendered map
         |
-Generic OrcMaps overlays   (marker, icon, text, polyline, polygon, circle,
-        |                    route, track, waypoint -- src/overlays,
-        |                    not yet implemented)
+Generic OrcMaps overlays   (markers, lines, polygons, circles, sectors,
+        |                    vectors -- include/orcmap/overlay.hpp)
 Application-specific overlays   (aircraft, LoRa nodes, RF bearings, P25
                                   sites, transmitters -- OrcSDR's own code,
                                   never OrcMaps')

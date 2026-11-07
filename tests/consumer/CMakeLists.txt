@@ -27,6 +27,7 @@ add_library(orcmap_engine STATIC
     ${ORCMAP_ROOT}/src/render/style.cpp
     ${ORCMAP_ROOT}/src/render/renderer.cpp
     ${ORCMAP_ROOT}/src/render/clip.cpp
+    ${ORCMAP_ROOT}/src/overlays/overlay.cpp
     ${ORCMAP_ROOT}/adapters/host/file_byte_source.cpp
     ${ORCMAP_ROOT}/adapters/host/framebuffer_target.cpp
     ${ORCMAP_ROOT}/third_party/miniz/miniz.c
@@ -64,3 +65,7 @@ add_test(
             ${ORCMAP_ROOT}/tests/fixtures/tiny.mvt
             ${ORCMAP_ROOT}/tests/fixtures/tiny-gzip.pmtiles
 )
+
+add_executable(orcmap_overlay_consumer_test overlay_consumer_test.cpp)
+target_link_libraries(orcmap_overlay_consumer_test PRIVATE orcmap_engine)
+add_test(NAME orcmap_overlay_consumer_test COMMAND orcmap_overlay_consumer_test)

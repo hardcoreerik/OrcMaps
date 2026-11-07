@@ -1,0 +1,30 @@
+name: Generic overlay host and consumer tests
+on:
+  push:
+    paths:
+      - 'include/orcmap/overlay.hpp'
+      - 'src/overlays/**'
+      - 'tests/host/**'
+      - 'tests/consumer/**'
+      - '.github/workflows/overlay-host-tests.yml'
+  pull_request:
+    paths:
+      - 'include/orcmap/overlay.hpp'
+      - 'src/overlays/**'
+      - 'tests/host/**'
+      - 'tests/consumer/**'
+      - '.github/workflows/overlay-host-tests.yml'
+
+jobs:
+  host-and-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure and build host tests
+        run: cmake -S tests/host -B build-host -DCMAKE_BUILD_TYPE=Debug && cmake --build build-host -j 2
+      - name: Run host tests
+        run: ctest --test-dir build-host --output-on-failure
+      - name: Configure and build external consumer tests
+        run: cmake -S tests/consumer -B build-consumer -DCMAKE_BUILD_TYPE=Debug && cmake --build build-consumer -j 2
+      - name: Run external consumer tests
+        run: ctest --test-dir build-consumer --output-on-failure

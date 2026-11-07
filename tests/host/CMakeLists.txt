@@ -22,6 +22,7 @@ add_executable(orcmap_host_tests
     test_clip.cpp
     test_stroke.cpp
     test_render.cpp
+    test_overlay.cpp
     test_compression.cpp
     test_pack.cpp
     test_pack_discovery.cpp
@@ -42,6 +43,7 @@ add_executable(orcmap_host_tests
     ${ORCMAP_ROOT}/src/render/style.cpp
     ${ORCMAP_ROOT}/src/render/renderer.cpp
     ${ORCMAP_ROOT}/src/render/clip.cpp
+    ${ORCMAP_ROOT}/src/overlays/overlay.cpp
     ${ORCMAP_ROOT}/adapters/host/file_byte_source.cpp
     ${ORCMAP_ROOT}/adapters/host/pack_filesystem.cpp
     ${ORCMAP_ROOT}/adapters/host/framebuffer_target.cpp

@@ -30,6 +30,7 @@ idf_component_register(
          "src/render/renderer.cpp"
          "src/render/labels.cpp"
          "src/render/clip.cpp"
+         "src/overlays/overlay.cpp"
          "adapters/esp_idf/file_byte_source.cpp"
          "adapters/esp_idf/partition_byte_source.cpp"
          "third_party/miniz/miniz.c"
