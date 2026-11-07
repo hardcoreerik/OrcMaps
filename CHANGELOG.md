@@ -10,8 +10,9 @@ Consumers pin a release by its full commit SHA (`docs/ORCSDR_INTEGRATION.md`).
 - Generic public overlay API, render pass, bounded scene/layer storage, opaque
   object picking, and configurable marker, path, area and geodesic geometry.
 - Added host and external-consumer tests, demo and documentation.
-- No change to v0.3.0 release pin. Full existing suite and hardware testing
-  remain pending; basemap restoration and alpha compositing are not automatic.
+- v0.3.0 release pin unchanged; all 7 host and both external-consumer
+  tests passed in CI. ESP-IDF and hardware proof remain separate gates.
+  Basemap restoration and alpha blending are not automatic.
 
 ## 0.3.0 - 2026-10-18
 

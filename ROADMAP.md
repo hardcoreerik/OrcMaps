@@ -325,7 +325,8 @@ changed is in `CHANGELOG.md`; the consumer contract is
 - [x] Markers, tracks, polygons/holes, geographic circles, sectors and vectors
 - [x] Portable rendering and an independent external-consumer test
 - [x] Standalone sandbox C++17 and sanitizer tests
-- [ ] Full original host/consumer regression and ESP-IDF compilation verified
+- [x] Full host and consumer suites verified on GitHub Actions (7+2 tests)
+- [ ] ESP-IDF compilation and link gates for P4 and S3 verified
 - [ ] ESP32-P4 hardware draw, touch, CPU and peak memory measured
 - [ ] Automatic dirty-region basemap restoration and alpha blending
 

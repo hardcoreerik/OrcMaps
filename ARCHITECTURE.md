@@ -71,7 +71,7 @@ mapping is EXPERIMENTAL, not the tile-content schema.
 | Renderer core | `include/orcmap/renderer.hpp`, `src/render/renderer.cpp`, `src/render/clip.cpp` | Implemented (host-proof: ClearMapBackground + per-tile RenderFeatureTile). Not a complete map engine. |
 | Host framebuffer | `adapters/host/framebuffer_target.{hpp,cpp}` | Implemented (host only; RGBA8 + optional PPM) |
 | M5GFX adapter | `adapters/m5gfx/include/orcmap/m5gfx/` | Implemented as `DisplayTarget`. Exported include path; no M5GFX link in core. |
-| Overlay primitives | `include/orcmap/overlay.hpp`, `src/overlays/overlay.cpp` | Generic shapes, bounded layers, picking. Hardware performance unmeasured. |
+| Overlay primitives | `include/orcmap/overlay.hpp`, `src/overlays/overlay.cpp` | Generic shapes, bounded layers, picking. Full host/consumer CI passed; hardware performance unmeasured. |
 | Tile/rendered-tile cache | `src/cache/` | Not implemented (empty dir); `RenderedTileCacheKey` shape exists in `include/orcmap/cache_key.hpp` |
 | Pack builder | `tools/pack-builder/` | PARTIAL: Springfield/97477 host pack script (Planetiler, not a runtime dep) |
 | Pack inspector | `tools/pack-inspect/` | Implemented (host). Uses `EnumerateVisibleTiles`. |

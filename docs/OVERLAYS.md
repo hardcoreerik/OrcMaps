@@ -133,6 +133,6 @@ compiled and linked from a project outside the OrcMaps internals.
 Initial sandbox compilation and assertions were run against a minimal
 public-API-compatible host harness with GCC 14, C++17, `-Wall -Wextra
 -Wpedantic -Werror`, AddressSanitizer and UndefinedBehaviorSanitizer.
-The full OrcMaps host suite, ESP-IDF compilation, and physical hardware
-render/touch tests remain separate release gates and must not be claimed
-from the sandbox run.
+The full OrcMaps host (7 CTest targets) and external-consumer (2 CTest
+targets) suites passed in feature-branch GitHub Actions. ESP-IDF compilation
+and physical hardware render/touch remain separate release gates.
