@@ -30,7 +30,7 @@ bool ValidObject(const OverlayObject& o) {
       o.ring_sizes.size() > kOverlayMaxRings) return false;
   for (const auto& p : o.vertices) if (!OverlayCoordinateValid(p)) return false;
   switch (o.kind) {
-    case OverlayKind::kMarker: return OverlayCoordinateValid(o.position) && o.vertices.empty() && Finite(o.bearing_deg);
+    case OverlayKind::kMarker: return OverlayCoordinateValid(o.position) && o.vertices.empty() && o.ring_sizes.empty() && Finite(o.bearing_deg);
     case OverlayKind::kPolyline: return o.vertices.size() >= 2 && o.ring_sizes.empty();
     case OverlayKind::kPolygon: {
       if (o.ring_sizes.empty()) return false;
@@ -45,7 +45,7 @@ bool ValidObject(const OverlayObject& o) {
     case OverlayKind::kVector:
     case OverlayKind::kSector:
       if (!OverlayCoordinateValid(o.position) || !o.vertices.empty() ||
-          !Finite(o.radius_m) || o.radius_m <= 0 ||
+          !o.ring_sizes.empty() || !Finite(o.radius_m) || o.radius_m <= 0 ||
           o.radius_m > kMaxDistanceM || !Finite(o.bearing_deg)) return false;
       if (o.kind != OverlayKind::kSector) return true;
       return Finite(o.start_bearing_deg) && Finite(o.sweep_deg) &&
@@ -112,7 +112,7 @@ bool ProjectPath(const Viewport& v, const LatLon* points, size_t n,
     double x, y;
     if (!ProjectLatLon(v, points[i], &x, &y) || !Finite(x) || !Finite(y)) return false;
     if (i == 0 && Finite(anchor)) x += world_px * std::round((anchor - x) / world_px);
-    if (i > 0) x += world_px * std::round((out->back().x - x) / world_px);
+    if (i > 0) x += world_px * std::round((out->back().x - shift - x) / world_px);
     out->push_back({x + shift, y});
   }
   return true;
@@ -191,6 +191,8 @@ void DrawOne(const OverlayObject& o, const Viewport& v, RenderTarget* target,
         (o.style.marker_shape == MarkerShape::kArrow ? 7 :
          (o.style.marker_shape == MarkerShape::kTriangle ? 3 : 4));
     int xy[2 * kMarkerPoints];
+    const double heading = std::remainder(o.bearing_deg, 360.0) * kPi / 180.0;
+    const double sine = std::sin(heading), cosine = std::cos(heading);
     for (size_t i = 0; i < n; ++i) {
       double px = 0, py = 0;
       if (circular) {
@@ -210,18 +212,39 @@ void DrawOne(const OverlayObject& o, const Viewport& v, RenderTarget* target,
                                          {0.22,1},{-0.22,1},{-0.22,0.48},{-0.65,0.7}};
         px = corners[i][0]; py = corners[i][1];
       }
-      const double heading = std::remainder(o.bearing_deg, 360.0) * kPi / 180.0;
-      const double rx = px * std::cos(heading) - py * std::sin(heading);
-      const double ry = px * std::sin(heading) + py * std::cos(heading);
+      const double rx = px * cosine - py * sine;
+      const double ry = px * sine + py * cosine;
       xy[2*i] = SafeInt(x + rx * r); xy[2*i+1] = SafeInt(y + ry * r);
     }
-    if (o.style.fill) target->FillPolygon(xy, n, o.style.color);
+    if (o.style.fill) {
+      scratch.path.clear();
+      for (size_t i = 0; i < n; ++i)
+        scratch.path.push_back({static_cast<double>(xy[2*i]),
+                                static_cast<double>(xy[2*i+1])});
+      ClipPolygon(scratch, clip);
+      if (scratch.clip_b.size() >= 3) {
+        scratch.polygon_xy.clear();
+        for (SP p : scratch.clip_b) {
+          scratch.polygon_xy.push_back(SafeInt(p.x));
+          scratch.polygon_xy.push_back(SafeInt(p.y));
+        }
+        target->FillPolygon(scratch.polygon_xy.data(), scratch.clip_b.size(), o.style.color);
+      }
+    }
     if (o.style.outline || o.selected) {
       for (size_t i = 0; i < n; ++i) {
         const size_t j = (i + 1) % n;
-        target->DrawLine(xy[2*i], xy[2*i+1], xy[2*j], xy[2*j+1],
-                         o.selected ? Color::Rgb(255, 230, 0) : o.style.outline_color,
-                         o.selected ? 2 : o.style.stroke_width_px);
+        int x0 = xy[2*i], y0 = xy[2*i+1];
+        int x1 = xy[2*j], y1 = xy[2*j+1];
+        const float width = o.selected ? 2.0f : o.style.stroke_width_px;
+        const int half = static_cast<int>(std::ceil(width * 0.5f));
+        if (ClipLineToPixelRect(&x0, &y0, &x1, &y1,
+            clip.x-half, clip.y-half, clip.x+clip.width-1+half,
+            clip.y+clip.height-1+half)) {
+          target->DrawLine(x0, y0, x1, y1,
+                           o.selected ? Color::Rgb(255, 230, 0) : o.style.outline_color,
+                           width);
+        }
       }
     }
     return;
@@ -445,14 +468,18 @@ bool RenderOverlays(const OverlayScene& scene, const Viewport& viewport,
   const PixelRect prior = target->ClipRect();
   const PixelRect clip = IntersectPixelRects(prior, {0,0,viewport.width_px,viewport.height_px});
   if (clip.width == 0 || clip.height == 0) return true;
-  const bool clipped = target->SetClipRect(clip);
+  const bool need_clip = clip.x != prior.x || clip.y != prior.y ||
+      clip.width != prior.width || clip.height != prior.height;
+  // A target that cannot accept a narrower scissor must not draw outside
+  // the requested viewport (including thick strokes and polygon fills).
+  if (need_clip && !target->SetClipRect(clip)) return false;
   VisitDrawOrder(scene, false, [&](const OverlayLayer& layer) {
     for (const auto& o : layer.objects) {
       if (!o.visible) continue;
       VisitWorldCopies(viewport, [&](double shift) { DrawOne(o,viewport,target,*scratch,clip,shift); });
     }
   });
-  if (clipped) target->SetClipRect(prior);
+  if (need_clip) target->SetClipRect(prior);
   return true;
 }
 
