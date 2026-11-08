@@ -148,6 +148,19 @@ void TestRepeatedWorldPathsStayShort(){
  ORCMAP_EXPECT_TRUE(HitTestOverlays(s,v,96,120,&hit,&scratch,6));
  ORCMAP_EXPECT_TRUE(hit.object_id==8u);
 }
+void TestMarkerFillStaysInViewport(){
+ OverlayScene s;OverlayScratch scratch;CaptureTarget target;
+ ORCMAP_EXPECT_TRUE(s.AddLayer(1));
+ auto m=Marker(1,0,-7); // At the west edge of the viewport at zoom 5.
+ m.style.marker_size_px=30;m.style.outline=false;
+ ORCMAP_EXPECT_TRUE(s.Upsert(1,m));
+ ORCMAP_EXPECT_TRUE(RenderOverlays(s,V(),&target,&scratch));
+ ORCMAP_EXPECT_TRUE(target.polygons>0);
+ for (size_t i=0;i+1<target.xy.size();i+=2) {
+  ORCMAP_EXPECT_TRUE(target.xy[i]>=0 && target.xy[i]<target.w);
+  ORCMAP_EXPECT_TRUE(target.xy[i+1]>=0 && target.xy[i+1]<target.h);
+ }
+}
 void TestClippingRequiresScissor(){
  OverlayScene s;OverlayScratch scratch;CaptureTarget target;
  ORCMAP_EXPECT_TRUE(s.AddLayer(1));
@@ -158,7 +171,7 @@ void TestClippingRequiresScissor(){
 }
 void RunOverlayTests(){
  TestSceneBasics();TestInvalidAndLimits();TestMarkersAndSelection();
- TestRepeatedWorldPathsStayShort();TestClippingRequiresScissor();
+ TestRepeatedWorldPathsStayShort();TestClippingRequiresScissor();TestMarkerFillStaysInViewport();
  TestPolylineAndAntimeridian();TestPolygonsAndHoles();TestPanZoomAndWorldCopies();TestGeographyAndRedraw();
  puts("PASS: OrcMaps generic overlay tests complete");
 }
