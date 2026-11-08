@@ -50,7 +50,8 @@ void TestInvalidAndLimits(){
  auto m=Marker(1,90);ORCMAP_EXPECT_TRUE(!s.Upsert(1,m));
  m=Marker(1);m.bearing_deg=std::numeric_limits<double>::quiet_NaN();ORCMAP_EXPECT_TRUE(!s.Upsert(1,m));
  m=Marker(1);m.position.lon_deg=181;ORCMAP_EXPECT_TRUE(!s.Upsert(1,m));
- m=Marker(1);ORCMAP_EXPECT_TRUE(s.Upsert(1,m));
+ m=Marker(1);m.ring_sizes={3};ORCMAP_EXPECT_TRUE(!s.Upsert(1,m));
+ m.ring_sizes.clear();ORCMAP_EXPECT_TRUE(s.Upsert(1,m));
  OverlayObject p;p.id=2;p.kind=OverlayKind::kPolyline;p.vertices={{0,0},{0,1},{1,1},{1,0}};
  ORCMAP_EXPECT_TRUE(s.Upsert(1,p));ORCMAP_EXPECT_TRUE(s.VertexCount()==4);
  p.vertices.push_back({2,2});ORCMAP_EXPECT_TRUE(!s.Upsert(1,p));ORCMAP_EXPECT_TRUE(s.VertexCount()==4);
@@ -59,6 +60,7 @@ void TestInvalidAndLimits(){
  a.ring_sizes={4};ORCMAP_EXPECT_TRUE(!s.Upsert(1,a));a.ring_sizes={3};ORCMAP_EXPECT_TRUE(!s.Upsert(1,a));
  a.id=2;a.ring_sizes={3};ORCMAP_EXPECT_TRUE(s.Upsert(1,a));ORCMAP_EXPECT_TRUE(s.VertexCount()==3);
  OverlayObject c;c.kind=OverlayKind::kCircle;c.radius_m=-1;ORCMAP_EXPECT_TRUE(!s.Upsert(1,c));
+ c.radius_m=1000;c.ring_sizes={3};ORCMAP_EXPECT_TRUE(!s.Upsert(1,c));
 }
 void TestMarkersAndSelection(){
  OverlayScene s;OverlayScratch scratch;CaptureTarget target;
@@ -131,8 +133,32 @@ void TestGeographyAndRedraw(){
  for(int i=0;i<1000;++i)ORCMAP_EXPECT_TRUE(RenderOverlays(s,V(10),&t,&scratch));
  ORCMAP_EXPECT_TRUE(cap==scratch.path.capacity()&&cap2==scratch.clip_a.capacity()&&cap3==scratch.polygon_xy.capacity());
 }
+void TestRepeatedWorldPathsStayShort(){
+ OverlayScene s;OverlayScratch scratch;CaptureTarget target;
+ ORCMAP_EXPECT_TRUE(s.AddLayer(1));
+ OverlayObject p;p.id=8;p.kind=OverlayKind::kPolyline;
+ p.vertices={{0,0},{0,4},{0,8}};
+ ORCMAP_EXPECT_TRUE(s.Upsert(1,p));
+ auto v=V(0);v.tile_size_px=64;v.width_px=320;
+ ORCMAP_EXPECT_TRUE(RenderOverlays(s,v,&target,&scratch));
+ ORCMAP_EXPECT_TRUE(target.lines>2);
+ ORCMAP_EXPECT_TRUE(target.max_len < 8);
+ // The copies must remain individually touch-selectable.
+ OverlayHit hit;
+ ORCMAP_EXPECT_TRUE(HitTestOverlays(s,v,96,120,&hit,&scratch,6));
+ ORCMAP_EXPECT_TRUE(hit.object_id==8u);
+}
+void TestClippingRequiresScissor(){
+ OverlayScene s;OverlayScratch scratch;CaptureTarget target;
+ ORCMAP_EXPECT_TRUE(s.AddLayer(1));
+ ORCMAP_EXPECT_TRUE(s.Upsert(1,Marker(1)));
+ auto v=V();v.width_px=200; // Target is 320 wide, no SetClipRect support.
+ ORCMAP_EXPECT_TRUE(!RenderOverlays(s,v,&target,&scratch));
+ ORCMAP_EXPECT_TRUE(target.polygons==0);
+}
 void RunOverlayTests(){
  TestSceneBasics();TestInvalidAndLimits();TestMarkersAndSelection();
+ TestRepeatedWorldPathsStayShort();TestClippingRequiresScissor();
  TestPolylineAndAntimeridian();TestPolygonsAndHoles();TestPanZoomAndWorldCopies();TestGeographyAndRedraw();
  puts("PASS: OrcMaps generic overlay tests complete");
 }
