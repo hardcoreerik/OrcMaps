@@ -136,3 +136,21 @@ public-API-compatible host harness with GCC 14, C++17, `-Wall -Wextra
 The full host (7 CTest targets), external-consumer (2 CTest targets),
 ESP32-P4 and ESP32-S3 ESP-IDF 5.5.4 compile/link gates passed in GitHub
 Actions. Physical hardware render/touch, CPU and peak RAM remain unverified.
+
+## Review hardening (2026-11-07)
+
+Repeated-world polyline and polygon projection now unwraps each vertex relative
+to the previous vertex *in the same copy*. Previously, applying a world-copy
+offset on every vertex could stretch tracks and create false segments on
+low-zoom repeated maps. The host regression test covers a three-point track
+with a map wider than the world.
+
+An overlay pass requiring a narrower clip rectangle now returns `false` without
+drawing if the target declines `SetClipRect`. This avoids painting into an
+unclipped neighboring UI region, particularly for thick strokes. Targets that
+render into a full-size viewport need no additional scissor. Marker fills are
+polygon-clipped to the visible region and their outlines are line-clipped.
+
+Markers, circles, sectors and vectors reject stray polygon ring metadata.
+Marker rotation computes sine/cosine once per marker draw rather than for
+every vertex.
