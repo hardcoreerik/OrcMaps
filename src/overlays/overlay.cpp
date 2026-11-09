@@ -93,10 +93,17 @@ void ShapeVertices(const OverlayObject& o, OverlayScratch& scratch,
       scratch.generated.push_back(Destination(o.position, o.radius_m,
           (360.0 * i) / kOverlayArcSegments));
   } else if (o.kind == OverlayKind::kSector) {
-    scratch.generated.push_back(o.position);
-    for (size_t i = 0; i <= kOverlayArcSegments; ++i)
+    // A full revolution is a circle: adding the center would create a
+    // spurious radial outline and touch target along the closing spoke.
+    const bool full_circle = o.sweep_deg == 360.0;
+    if (!full_circle) scratch.generated.push_back(o.position);
+    // Reduce the starting angle before interpolation: at a huge (but finite)
+    // bearing, adding one small sweep step can lose all floating-point bits.
+    const double start = std::remainder(o.start_bearing_deg, 360.0);
+    const size_t steps = full_circle ? kOverlayArcSegments : kOverlayArcSegments + 1;
+    for (size_t i = 0; i < steps; ++i)
       scratch.generated.push_back(Destination(o.position, o.radius_m,
-          o.start_bearing_deg + o.sweep_deg * i / kOverlayArcSegments));
+          start + o.sweep_deg * i / kOverlayArcSegments));
   }
   *points = &scratch.generated;
   *count = scratch.generated.size();
@@ -120,6 +127,49 @@ bool ProjectPath(const Viewport& v, const LatLon* points, size_t n,
 
 int SafeInt(double x) {
   return static_cast<int>(std::clamp(std::round(x), -1000000.0, 1000000.0));
+}
+
+// Clip in projected double precision. Integer saturation before clipping can
+// change a segment's slope at high zoom and move a visible crossing.
+bool ClipProjectedLine(SP* a, SP* b, PixelRect clip, float stroke_width_px) {
+  const double pad = std::ceil(stroke_width_px * 0.5);
+  const double left = static_cast<double>(clip.x) - pad;
+  const double top = static_cast<double>(clip.y) - pad;
+  const double right = static_cast<double>(clip.x) + clip.width - 1 + pad;
+  const double bottom = static_cast<double>(clip.y) + clip.height - 1 + pad;
+  const double dx = b->x - a->x;
+  const double dy = b->y - a->y;
+  double enter = 0.0, leave = 1.0;
+  const auto bound = [&](double p, double q) {
+    if (p == 0.0) return q >= 0.0;
+    const double t = q / p;
+    if (p < 0.0) {
+      if (t > leave) return false;
+      enter = std::max(enter, t);
+    } else {
+      if (t < enter) return false;
+      leave = std::min(leave, t);
+    }
+    return enter <= leave;
+  };
+  if (!bound(-dx, a->x - left) || !bound(dx, right - a->x) ||
+      !bound(-dy, a->y - top) || !bound(dy, bottom - a->y)) return false;
+  const SP old = *a;
+  *a = {old.x + enter * dx, old.y + enter * dy};
+  *b = {old.x + leave * dx, old.y + leave * dy};
+  return true;
+}
+
+// Draw and touch extents must include rotated corners and visible outlines.
+double MarkerExtent(const OverlayObject& o) {
+  const double half_size = o.style.marker_size_px * (o.selected ? 0.65 : 0.5);
+  double shape_radius = 1.0;
+  if (o.style.marker_shape == MarkerShape::kSquare) shape_radius = std::sqrt(2.0);
+  if (o.style.marker_shape == MarkerShape::kArrow)
+    shape_radius = std::sqrt(1.0 + 0.22 * 0.22);
+  const double stroke = (o.style.outline || o.selected)
+      ? (o.selected ? 2.0 : o.style.stroke_width_px) * 0.5 : 0.0;
+  return half_size * shape_radius + stroke + 1.0;  // Pixel rounding margin.
 }
 
 // Sutherland-Hodgman polygon clipping to the framebuffer/view rectangle.
@@ -183,8 +233,9 @@ void DrawOne(const OverlayObject& o, const Viewport& v, RenderTarget* target,
     if (!ProjectLatLon(v, o.position, &x, &y)) return;
     x += shift;
     const double r = o.style.marker_size_px * (o.selected ? 0.65 : 0.5);
-    if (x < clip.x - r - 2 || x > clip.x + clip.width + r + 2 ||
-        y < clip.y - r - 2 || y > clip.y + clip.height + r + 2) return;
+    const double extent = MarkerExtent(o);
+    if (x < clip.x - extent || x > clip.x + clip.width - 1 + extent ||
+        y < clip.y - extent || y > clip.y + clip.height - 1 + extent) return;
     constexpr size_t kMarkerPoints = 16;
     const bool circular = o.style.marker_shape == MarkerShape::kCircle;
     const size_t n = circular ? kMarkerPoints :
@@ -260,11 +311,9 @@ void DrawOne(const OverlayObject& o, const Viewport& v, RenderTarget* target,
     const size_t count = closed ? n : n - 1;
     for (size_t i = 0; i < count; ++i) {
       SP a = scratch.path[i], b = scratch.path[(i + 1) % n];
-      int x0 = SafeInt(a.x), y0 = SafeInt(a.y), x1 = SafeInt(b.x), y1 = SafeInt(b.y);
-      const int half = static_cast<int>(std::ceil(o.style.stroke_width_px * 0.5f));
-      if (ClipLineToPixelRect(&x0, &y0, &x1, &y1,
-          clip.x-half, clip.y-half, clip.x+clip.width-1+half, clip.y+clip.height-1+half)) {
-        target->DrawLine(x0, y0, x1, y1, o.style.color, o.style.stroke_width_px);
+      if (ClipProjectedLine(&a, &b, clip, o.style.stroke_width_px)) {
+        target->DrawLine(SafeInt(a.x), SafeInt(a.y), SafeInt(b.x), SafeInt(b.y),
+                         o.style.color, o.style.stroke_width_px);
       }
     }
     return;
@@ -301,13 +350,11 @@ void DrawOne(const OverlayObject& o, const Viewport& v, RenderTarget* target,
       if (!ProjectPath(v, points->data() + offset, len, shift, &scratch.path, anchor)) return;
       if (ring == 0) anchor = scratch.path.front().x - shift;
       offset += len;
-      const int half = static_cast<int>(std::ceil(o.style.stroke_width_px * 0.5f));
       for (size_t i = 0; i < len; ++i) {
-        const SP a = scratch.path[i], b = scratch.path[(i+1)%len];
-        int x0 = SafeInt(a.x), y0 = SafeInt(a.y), x1 = SafeInt(b.x), y1 = SafeInt(b.y);
-        if (ClipLineToPixelRect(&x0,&y0,&x1,&y1,
-            clip.x-half,clip.y-half,clip.x+clip.width-1+half,clip.y+clip.height-1+half)) {
-          target->DrawLine(x0,y0,x1,y1,o.style.outline_color,o.style.stroke_width_px);
+        SP a = scratch.path[i], b = scratch.path[(i+1)%len];
+        if (ClipProjectedLine(&a, &b, clip, o.style.stroke_width_px)) {
+          target->DrawLine(SafeInt(a.x), SafeInt(a.y), SafeInt(b.x), SafeInt(b.y),
+                           o.style.outline_color, o.style.stroke_width_px);
         }
       }
     }
@@ -320,7 +367,7 @@ bool HitOne(const OverlayObject& o, const Viewport& v, double x, double y,
     double sx, sy;
     if (!ProjectLatLon(v, o.position, &sx, &sy)) return false;
     sx += shift;
-    const double r = std::max<double>(o.style.marker_size_px * (o.selected ? 0.65 : 0.5), 4) + tolerance;
+    const double r = std::max(4.0, MarkerExtent(o)) + tolerance;
     return (x - sx) * (x - sx) + (y - sy) * (y - sy) <= r * r;
   }
   const std::vector<LatLon>* points;
@@ -370,15 +417,16 @@ void VisitDrawOrder(const OverlayScene& scene, bool reverse, Fn&& fn) {
   else { for (size_t i=0;i<count;++i) fn(*ordered[i]); }
 }
 
-// Draw the nearest world and repeat it only when the viewport is wide enough
-// to show another copy. In normal zoom this visits one copy.
+// Include copies with a partially visible marker, stroke or touch footprint,
+// even when their center lies just outside the nominal world-copy threshold.
 template <typename Fn>
-void VisitWorldCopies(const Viewport& v, Fn&& fn) {
+void VisitWorldCopies(const Viewport& v, double extra_px, Fn&& fn) {
   const double world = static_cast<double>(TilesPerAxis(v.zoom))*v.tile_size_px;
-  const int copies = static_cast<int>(std::min<double>(kMaxWorldCopies,
-      std::ceil(static_cast<double>(v.width_px) / world) + 2.0));
+  const double reach = static_cast<double>(v.width_px)*0.5 + world*0.5 + extra_px;
+  const int copies = static_cast<int>(std::min<double>(
+      kMaxWorldCopies, std::ceil(reach / world) + 1.0));
   for (int i = -copies; i <= copies; ++i) {
-    if (std::abs(i*world) < v.width_px * 0.5 + world * 0.5) fn(i*world);
+    if (std::abs(i*world) <= reach) fn(i*world);
   }
 }
 }  // namespace
@@ -456,9 +504,13 @@ bool OverlayScene::Remove(uint32_t id, uint64_t object_id) {
 OverlayScratch::OverlayScratch() {
   generated.reserve(kOverlayArcSegments + 2);
   path.reserve(kOverlayMaxVerticesPerObject);
-  clip_a.reserve(kOverlayMaxVerticesPerObject + 8);
-  clip_b.reserve(kOverlayMaxVerticesPerObject + 8);
-  polygon_xy.reserve((kOverlayMaxVerticesPerObject + kOverlayMaxRings*4)*2);
+  // A concave ring may gain up to two boundary intersections per original
+  // edge plus rectangle corners. Reserve for worst-case four-edge clipping;
+  // polygon_xy also accounts for each supported ring's corner vertices.
+  constexpr size_t kClippedRingCapacity = 3*kOverlayMaxVerticesPerObject + 4;
+  clip_a.reserve(kClippedRingCapacity);
+  clip_b.reserve(kClippedRingCapacity);
+  polygon_xy.reserve(2*(3*kOverlayMaxVerticesPerObject + 4*kOverlayMaxRings));
   polygon_ring_sizes.reserve(kOverlayMaxRings);
 }
 
@@ -476,7 +528,11 @@ bool RenderOverlays(const OverlayScene& scene, const Viewport& viewport,
   VisitDrawOrder(scene, false, [&](const OverlayLayer& layer) {
     for (const auto& o : layer.objects) {
       if (!o.visible) continue;
-      VisitWorldCopies(viewport, [&](double shift) { DrawOne(o,viewport,target,*scratch,clip,shift); });
+      const double extra = o.kind == OverlayKind::kMarker
+          ? MarkerExtent(o) : std::ceil(o.style.stroke_width_px*0.5);
+      VisitWorldCopies(viewport, extra, [&](double shift) {
+        DrawOne(o,viewport,target,*scratch,clip,shift);
+      });
     }
   });
   if (need_clip) target->SetClipRect(prior);
@@ -496,7 +552,9 @@ bool HitTestOverlays(const OverlayScene& scene, const Viewport& viewport,
     for (size_t i=layer.objects.size();i>0;--i) {
       const auto& o=layer.objects[i-1];
       if (!o.visible || !o.selectable) continue;
-      VisitWorldCopies(viewport, [&](double shift) {
+      const double extra = (o.kind == OverlayKind::kMarker
+          ? MarkerExtent(o) : std::ceil(o.style.stroke_width_px*0.5)) + tolerance;
+      VisitWorldCopies(viewport, extra, [&](double shift) {
         if (!found && HitOne(o,viewport,screen_x,screen_y,*scratch,tolerance,shift)) {
           *hit = {layer.id, o.id}; found = true;
         }
