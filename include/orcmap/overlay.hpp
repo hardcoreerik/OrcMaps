@@ -103,8 +103,9 @@ struct OverlayHit {
   uint64_t object_id = 0;
 };
 
-// Provision scratch once and reuse; no allocation in steady-state rendering.
-// One instance per simultaneous renderer / thread.
+// Reuse overlay geometry scratch to avoid repeat allocations once capacities
+// are warmed. RenderTarget implementations may separately allocate; reuse and
+// warm the display target as well. One scratch per simultaneous renderer/thread.
 struct OverlayScratch {
   struct ScreenPoint { double x = 0, y = 0; };
   std::vector<LatLon> generated;
@@ -118,7 +119,8 @@ struct OverlayScratch {
 
 // Overlay pass NEVER clears or repaints the basemap. Caller must recompose
 // its original map pixels when clearing/moving/removing an old overlay.
-// Return false on invalid viewport/target, true on a completed draw pass.
+// Return false for invalid viewport/target or an unsupported narrower scissor;
+// callers should skip hit testing for a frame that failed to render.
 bool RenderOverlays(const OverlayScene& scene, const Viewport& viewport,
                     RenderTarget* target, OverlayScratch* scratch);
 
