@@ -16,14 +16,18 @@ constexpr double kMaxDistanceM = 20000000.0;
 constexpr size_t kMaxWorldCopies = 32;
 using SP = OverlayScratch::ScreenPoint;
 
+/** Check numeric values before projection and geometry arithmetic. */
 bool Finite(double x) { return std::isfinite(x); }
+/** Validate pixel dimensions and marker shape before storing an object. */
 bool ValidStyle(const OverlayStyle& s) {
   return Finite(s.marker_size_px) && s.marker_size_px > 0 &&
          s.marker_size_px <= 256 && Finite(s.stroke_width_px) &&
          s.stroke_width_px >= 0 && s.stroke_width_px <= 64 &&
          static_cast<unsigned>(s.marker_shape) <= static_cast<unsigned>(MarkerShape::kArrow);
 }
+/** Count caller-owned points; generated circle/sector vertices use scratch. */
 size_t VertexUse(const OverlayObject& o) { return o.vertices.size(); }
+/** Enforce kind-specific geometry contracts and per-object limits. */
 bool ValidObject(const OverlayObject& o) {
   if (!ValidStyle(o.style)) return false;
   if (o.vertices.size() > kOverlayMaxVerticesPerObject ||
@@ -54,6 +58,7 @@ bool ValidObject(const OverlayObject& o) {
   return false;
 }
 
+/** Reject unusable map viewports before drawing or hit testing. */
 bool ValidViewport(const Viewport& v) {
   return ZoomIsValid(v.zoom) && v.width_px > 0 && v.height_px > 0 &&
          v.tile_size_px > 0 && Finite(v.center_lat_deg) &&
@@ -62,6 +67,7 @@ bool ValidViewport(const Viewport& v) {
 
 // Great-circle destination from initial bearing. This is a spherical-earth
 // approximation, NOT a geodesic ellipsoid calculation.
+/** Approximate a spherical-Earth destination and wrap its longitude. */
 LatLon Destination(LatLon p, double distance_m, double bearing_deg) {
   const double lat = p.lat_deg * kPi / 180.0;
   const double lon = p.lon_deg * kPi / 180.0;
@@ -77,6 +83,7 @@ LatLon Destination(LatLon p, double distance_m, double bearing_deg) {
 }
 
 // Generate dynamic geographic shapes in provisioned scratch storage.
+/** Get explicit path vertices or generate geodesic shapes in reusable scratch. */
 void ShapeVertices(const OverlayObject& o, OverlayScratch& scratch,
                    const std::vector<LatLon>** points, size_t* count) {
   scratch.generated.clear();
@@ -111,6 +118,7 @@ void ShapeVertices(const OverlayObject& o, OverlayScratch& scratch,
 
 // The viewport's projection picks the closest world copy. Unwrap successive
 // vertices against their predecessor so antimeridian crossings are short.
+/** Project a path while unwrapping the antimeridian in one world copy. */
 bool ProjectPath(const Viewport& v, const LatLon* points, size_t n,
                  double shift, std::vector<SP>* out, double anchor = NAN) {
   out->clear();
@@ -125,12 +133,14 @@ bool ProjectPath(const Viewport& v, const LatLon* points, size_t n,
   return true;
 }
 
+/** Round and bound projected pixel coordinates after geometric clipping. */
 int SafeInt(double x) {
   return static_cast<int>(std::clamp(std::round(x), -1000000.0, 1000000.0));
 }
 
 // Clip in projected double precision. Integer saturation before clipping can
 // change a segment's slope at high zoom and move a visible crossing.
+/** Clip a projected line to a stroke-expanded pixel rectangle in double precision. */
 bool ClipProjectedLine(SP* a, SP* b, PixelRect clip, float stroke_width_px) {
   const double pad = std::ceil(stroke_width_px * 0.5);
   const double left = static_cast<double>(clip.x) - pad;
@@ -161,6 +171,7 @@ bool ClipProjectedLine(SP* a, SP* b, PixelRect clip, float stroke_width_px) {
 }
 
 // Draw and touch extents must include rotated corners and visible outlines.
+/** Conservatively bound rotated marker corners and their centered stroke. */
 double MarkerExtent(const OverlayObject& o) {
   const double half_size = o.style.marker_size_px * (o.selected ? 0.65 : 0.5);
   double shape_radius = 1.0;
@@ -175,6 +186,7 @@ double MarkerExtent(const OverlayObject& o) {
 
 // Sutherland-Hodgman polygon clipping to the framebuffer/view rectangle.
 // No target is asked to scan-convert huge offscreen polygons.
+/** Clip polygon vertices against one viewport boundary. */
 void ClipEdge(const std::vector<SP>& in, std::vector<SP>* out, int edge,
               double bound) {
   out->clear();
@@ -201,6 +213,7 @@ void ClipEdge(const std::vector<SP>& in, std::vector<SP>* out, int edge,
   }
 }
 
+/** Clip a complete polygon ring against the four viewport boundaries. */
 void ClipPolygon(OverlayScratch& scratch, PixelRect clip) {
   ClipEdge(scratch.path, &scratch.clip_a, 0, clip.x);
   ClipEdge(scratch.clip_a, &scratch.clip_b, 1, clip.x + clip.width - 1);
@@ -208,6 +221,7 @@ void ClipPolygon(OverlayScratch& scratch, PixelRect clip) {
   ClipEdge(scratch.clip_a, &scratch.clip_b, 3, clip.y + clip.height - 1);
 }
 
+/** Use even-odd crossings to classify a point inside one ring. */
 bool PixelInPolygon(const std::vector<SP>& polygon, double x, double y) {
   bool inside = false;
   for (size_t i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
@@ -218,6 +232,7 @@ bool PixelInPolygon(const std::vector<SP>& polygon, double x, double y) {
   return inside;
 }
 
+/** Compute squared touch distance to a projected line segment. */
 double SegmentDistSq(SP a, SP b, double x, double y) {
   const double dx = b.x - a.x, dy = b.y - a.y;
   const double l2 = dx * dx + dy * dy;
@@ -227,6 +242,7 @@ double SegmentDistSq(SP a, SP b, double x, double y) {
 }
 
 // A screen-space drawing pass for one object at a single world-copy shift.
+/** Render one overlay object at one world-copy shift without clearing the base map. */
 void DrawOne(const OverlayObject& o, const Viewport& v, RenderTarget* target,
              OverlayScratch& scratch, PixelRect clip, double shift) {
   if (o.kind == OverlayKind::kMarker) {
@@ -362,6 +378,7 @@ void DrawOne(const OverlayObject& o, const Viewport& v, RenderTarget* target,
   }
 }
 
+/** Hit-test a single object against the geometry used for rendering. */
 bool HitOne(const OverlayObject& o, const Viewport& v, double x, double y,
             OverlayScratch& scratch, float tolerance, double shift) {
   if (o.kind == OverlayKind::kMarker) {
@@ -402,6 +419,7 @@ bool HitOne(const OverlayObject& o, const Viewport& v, double x, double y,
   return inside;
 }
 
+/** Visit visible layers in stable painter order or reverse picking order. */
 template <typename Fn>
 void VisitDrawOrder(const OverlayScene& scene, bool reverse, Fn&& fn) {
   std::array<const OverlayLayer*, kOverlayMaxLayers> ordered{};
@@ -420,6 +438,7 @@ void VisitDrawOrder(const OverlayScene& scene, bool reverse, Fn&& fn) {
 
 // Include copies with a partially visible marker, stroke or touch footprint,
 // even when their center lies just outside the nominal world-copy threshold.
+/** Visit bounded repeated-world copies whose extents may overlap the viewport. */
 template <typename Fn>
 void VisitWorldCopies(const Viewport& v, double extra_px, Fn&& fn) {
   const double world = static_cast<double>(TilesPerAxis(v.zoom))*v.tile_size_px;
@@ -432,59 +451,71 @@ void VisitWorldCopies(const Viewport& v, double extra_px, Fn&& fn) {
 }
 }  // namespace
 
+/** Validate caller coordinates against strict supported Web Mercator bounds. */
 bool OverlayCoordinateValid(LatLon p) {
   return Finite(p.lat_deg) && Finite(p.lon_deg) &&
          p.lat_deg >= -kMercatorMaxLatDeg && p.lat_deg <= kMercatorMaxLatDeg &&
          p.lon_deg >= -180.0 && p.lon_deg <= 180.0;
 }
 
+/** Clamp requested scene budgets to fixed maximum capacities. */
 OverlayScene::OverlayScene(OverlayLimits limits) : limits_(limits) {
   limits_.layers = std::min(limits_.layers, kOverlayMaxLayers);
   limits_.objects = std::min(limits_.objects, kOverlayMaxObjects);
   limits_.vertices = std::min(limits_.vertices, kOverlayMaxVertices);
   layers_.reserve(limits_.layers);
 }
+/** Find a mutable layer by its application-defined identifier. */
 OverlayLayer* OverlayScene::FindLayer(uint32_t id) {
   for (auto& l : layers_) if (l.id == id) return &l;
   return nullptr;
 }
+/** Find a read-only layer without changing scene state. */
 const OverlayLayer* OverlayScene::FindLayer(uint32_t id) const {
   for (const auto& l : layers_) if (l.id == id) return &l;
   return nullptr;
 }
+/** Sum stored object counts across all layers. */
 size_t OverlayScene::ObjectCount() const {
   size_t n = 0; for (const auto& l : layers_) n += l.objects.size(); return n;
 }
+/** Sum input geometry vertices across the scene for capacity checks. */
 size_t OverlayScene::VertexCount() const {
   size_t n = 0; for (const auto& l : layers_) for (const auto& o : l.objects) n += VertexUse(o);
   return n;
 }
+/** Create a uniquely identified layer within the configured limit. */
 bool OverlayScene::AddLayer(uint32_t id, int order) {
   if (FindLayer(id) || layers_.size() >= limits_.layers) return false;
   OverlayLayer l; l.id = id; l.draw_order = order;
   layers_.push_back(std::move(l)); Change(); return true;
 }
+/** Toggle a layer without deleting its geographic objects. */
 bool OverlayScene::SetLayerVisible(uint32_t id, bool visible) {
   auto* l = FindLayer(id); if (!l) return false;
   if (l->visible != visible) { l->visible = visible; Change(); }
   return true;
 }
+/** Set the layer's stable painter-order priority. */
 bool OverlayScene::SetLayerOrder(uint32_t id, int order) {
   auto* l = FindLayer(id); if (!l) return false;
   if (l->draw_order != order) { l->draw_order = order; Change(); }
   return true;
 }
+/** Erase a layer and its objects, invalidating the scene revision. */
 bool OverlayScene::RemoveLayer(uint32_t id) {
   for (size_t i=0;i<layers_.size();++i) if (layers_[i].id==id) {
     layers_.erase(layers_.begin()+i); Change(); return true;
   }
   return false;
 }
+/** Remove all objects from one existing layer. */
 bool OverlayScene::ClearLayer(uint32_t id) {
   auto* l=FindLayer(id); if (!l) return false;
   if (!l->objects.empty()) { l->objects.clear(); Change(); }
   return true;
 }
+/** Validate and replace or append an object without exceeding budgets. */
 bool OverlayScene::Upsert(uint32_t id, const OverlayObject& o) {
   auto* l=FindLayer(id); if (!l || !ValidObject(o)) return false;
   for (auto& existing : l->objects) if (existing.id == o.id) {
@@ -494,6 +525,7 @@ bool OverlayScene::Upsert(uint32_t id, const OverlayObject& o) {
   if (ObjectCount() >= limits_.objects || VertexCount() + VertexUse(o) > limits_.vertices) return false;
   l->objects.push_back(o); Change(); return true;
 }
+/** Remove a single overlay object by its opaque ID. */
 bool OverlayScene::Remove(uint32_t id, uint64_t object_id) {
   auto* l=FindLayer(id); if (!l) return false;
   for (size_t i=0;i<l->objects.size();++i) if (l->objects[i].id == object_id) {
@@ -502,6 +534,7 @@ bool OverlayScene::Remove(uint32_t id, uint64_t object_id) {
   return false;
 }
 
+/** Provision reusable buffers for the largest supported clipping workload. */
 OverlayScratch::OverlayScratch() {
   generated.reserve(kOverlayArcSegments + 2);
   path.reserve(kOverlayMaxVerticesPerObject);
@@ -515,6 +548,7 @@ OverlayScratch::OverlayScratch() {
   polygon_ring_sizes.reserve(kOverlayMaxRings);
 }
 
+/** Draw visible overlays and restore the target's original clipping state. */
 bool RenderOverlays(const OverlayScene& scene, const Viewport& viewport,
                     RenderTarget* target, OverlayScratch* scratch) {
   if (!ValidViewport(viewport) || !target || !scratch || target->Width() <= 0 || target->Height() <= 0) return false;
@@ -540,6 +574,7 @@ bool RenderOverlays(const OverlayScene& scene, const Viewport& viewport,
   return true;
 }
 
+/** Return the topmost visible selectable object within the touch tolerance. */
 bool HitTestOverlays(const OverlayScene& scene, const Viewport& viewport,
                      double screen_x, double screen_y, OverlayHit* hit,
                      OverlayScratch* scratch, float tolerance_px) {
