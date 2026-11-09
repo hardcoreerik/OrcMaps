@@ -33,11 +33,14 @@ struct CaptureTarget : RenderTarget {
   }
 };
 
+/** Build a default application marker for scene test fixtures. */
 OverlayObject Marker(uint64_t id,double lat=0,double lon=0){
  OverlayObject o;o.id=id;o.position={lat,lon};return o;
 }
+/** Create an adjustable viewport centered on the equator. */
 Viewport V(int zoom=5,double lon=0){Viewport v;v.zoom=zoom;v.width_px=320;v.height_px=240;v.tile_size_px=256;v.center_lon_deg=lon;return v;}
 
+/** Exercise layer ownership, IDs, revisions and count limits. */
 void TestSceneBasics(){
  OverlayScene s({2,2,5});ORCMAP_EXPECT_TRUE(s.AddLayer(1));ORCMAP_EXPECT_TRUE(s.AddLayer(2));ORCMAP_EXPECT_TRUE(!s.AddLayer(3));
  ORCMAP_EXPECT_TRUE(!s.AddLayer(1));ORCMAP_EXPECT_TRUE(s.Upsert(1,Marker(0)));ORCMAP_EXPECT_TRUE(s.Upsert(2,Marker(0)));
@@ -48,6 +51,7 @@ void TestSceneBasics(){
  ORCMAP_EXPECT_TRUE(s.Remove(2,0));ORCMAP_EXPECT_TRUE(s.RemoveLayer(2));ORCMAP_EXPECT_TRUE(s.ClearLayer(1));
  ORCMAP_EXPECT_TRUE(s.ObjectCount()==0);ORCMAP_EXPECT_TRUE(!s.Remove(1,0));
 }
+/** Reject malformed geographic inputs while preserving prior scene state. */
 void TestInvalidAndLimits(){
  OverlayScene s({1,4,4});ORCMAP_EXPECT_TRUE(s.AddLayer(1));
  auto m=Marker(1,90);ORCMAP_EXPECT_TRUE(!s.Upsert(1,m));
@@ -65,6 +69,7 @@ void TestInvalidAndLimits(){
  OverlayObject c;c.kind=OverlayKind::kCircle;c.radius_m=-1;ORCMAP_EXPECT_TRUE(!s.Upsert(1,c));
  c.radius_m=1000;c.ring_sizes={3};ORCMAP_EXPECT_TRUE(!s.Upsert(1,c));
 }
+/** Confirm painter order, marker selection and hide/show behavior. */
 void TestMarkersAndSelection(){
  OverlayScene s;OverlayScratch scratch;CaptureTarget target;
  ORCMAP_EXPECT_TRUE(s.AddLayer(5,-1));ORCMAP_EXPECT_TRUE(s.AddLayer(9,10));
@@ -84,6 +89,7 @@ void TestMarkersAndSelection(){
  ORCMAP_EXPECT_TRUE(s.Upsert(5,a));ORCMAP_EXPECT_TRUE(RenderOverlays(s,V(),&target,&scratch));
  ORCMAP_EXPECT_TRUE(target.lines>0);
 }
+/** Verify short wrapped tracks and offscreen rejection. */
 void TestPolylineAndAntimeridian(){
  OverlayScene s;OverlayScratch scratch;CaptureTarget t;
  ORCMAP_EXPECT_TRUE(s.AddLayer(1));OverlayObject p;p.id=1;p.kind=OverlayKind::kPolyline;
@@ -95,6 +101,7 @@ void TestPolylineAndAntimeridian(){
  auto off=V(6,0);CaptureTarget out;
  ORCMAP_EXPECT_TRUE(RenderOverlays(s,off,&out,&scratch));ORCMAP_EXPECT_TRUE(out.lines==0);
 }
+/** Verify holes are excluded by even-odd fill and hit testing. */
 void TestPolygonsAndHoles(){
  OverlayScene s;OverlayScratch scratch;CaptureTarget t;ORCMAP_EXPECT_TRUE(s.AddLayer(5));
  OverlayObject p;p.id=45;p.kind=OverlayKind::kPolygon;
@@ -108,6 +115,7 @@ void TestPolygonsAndHoles(){
  ORCMAP_EXPECT_TRUE(HitTestOverlays(s,V(),sx,sy,&h,&scratch,0));ORCMAP_EXPECT_TRUE(h.object_id==45);
  ORCMAP_EXPECT_TRUE(s.Remove(5,45));ORCMAP_EXPECT_TRUE(!HitTestOverlays(s,V(),sx,sy,&h,&scratch,0));
 }
+/** Verify position projection and repeated-world rendering. */
 void TestPanZoomAndWorldCopies(){
  OverlayScene s; OverlayScratch sc; CaptureTarget t; ORCMAP_EXPECT_TRUE(s.AddLayer(7));
  auto m=Marker(321,0,1);ORCMAP_EXPECT_TRUE(s.Upsert(7,m));
@@ -121,6 +129,7 @@ void TestPanZoomAndWorldCopies(){
  CaptureTarget repeats;ORCMAP_EXPECT_TRUE(RenderOverlays(s,v,&repeats,&sc));
  ORCMAP_EXPECT_TRUE(repeats.polygons>=3); // Basemap repeats at zoom zero.
 }
+/** Verify generated shapes and scratch capacity stability after warm-up. */
 void TestGeographyAndRedraw(){
  OverlayScene s;OverlayScratch scratch;CaptureTarget t;ORCMAP_EXPECT_TRUE(s.AddLayer(1));
  OverlayObject c;c.id=13;c.kind=OverlayKind::kCircle;c.radius_m=10000;
@@ -136,6 +145,7 @@ void TestGeographyAndRedraw(){
  for(int i=0;i<1000;++i)ORCMAP_EXPECT_TRUE(RenderOverlays(s,V(10),&t,&scratch));
  ORCMAP_EXPECT_TRUE(cap==scratch.path.capacity()&&cap2==scratch.clip_a.capacity()&&cap3==scratch.polygon_xy.capacity());
 }
+/** Guard against accumulating copy offsets across track segments. */
 void TestRepeatedWorldPathsStayShort(){
  OverlayScene s;OverlayScratch scratch;CaptureTarget target;
  ORCMAP_EXPECT_TRUE(s.AddLayer(1));
@@ -151,6 +161,7 @@ void TestRepeatedWorldPathsStayShort(){
  ORCMAP_EXPECT_TRUE(HitTestOverlays(s,v,96,120,&hit,&scratch,6));
  ORCMAP_EXPECT_TRUE(hit.object_id==8u);
 }
+/** Ensure marker fills do not include coordinates outside the viewport. */
 void TestMarkerFillStaysInViewport(){
  OverlayScene s;OverlayScratch scratch;CaptureTarget target;
  ORCMAP_EXPECT_TRUE(s.AddLayer(1));
@@ -164,6 +175,7 @@ void TestMarkerFillStaysInViewport(){
   ORCMAP_EXPECT_TRUE(target.xy[i+1]>=0 && target.xy[i+1]<target.h);
  }
 }
+/** Reject a narrow clip when the target cannot enforce a scissor. */
 void TestClippingRequiresScissor(){
  OverlayScene s;OverlayScratch scratch;CaptureTarget target;
  ORCMAP_EXPECT_TRUE(s.AddLayer(1));
@@ -173,6 +185,7 @@ void TestClippingRequiresScissor(){
  ORCMAP_EXPECT_TRUE(target.polygons==0);
 }
 // A complete sector must not contain or hit a radial center-to-arc spoke.
+/** Guard 360-degree sector outlines and hit tests against ghost spokes. */
 void TestFullSectorHasNoRadialSpokes(){
  OverlayScene scene; OverlayScratch scratch; CaptureTarget target;
  ORCMAP_EXPECT_TRUE(scene.AddLayer(1));
@@ -189,6 +202,7 @@ void TestFullSectorHasNoRadialSpokes(){
  ORCMAP_EXPECT_TRUE(HitTestOverlays(scene,v,186,120,&hit,&scratch,3));
 }
 // Normalize the start before adding sub-degree steps at huge finite bearings.
+/** Preserve small arc steps when the start bearing is enormous. */
 void TestSectorHugeBearingPreservesSweep(){
  OverlayScene scene; OverlayScratch scratch; CaptureTarget target;
  ORCMAP_EXPECT_TRUE(scene.AddLayer(1));
@@ -204,6 +218,7 @@ void TestSectorHugeBearingPreservesSweep(){
                              scratch.generated.back().lon_deg)>1e-5);
 }
 // Rotated square corners and thick outlines must render and be selectable.
+/** Test rotated marker visibility and thick square corner picking. */
 void TestRotatedMarkerCullingAndOutlinePick(){
  OverlayScene scene; OverlayScratch scratch; CaptureTarget target;
  ORCMAP_EXPECT_TRUE(scene.AddLayer(1));
@@ -221,6 +236,7 @@ void TestRotatedMarkerCullingAndOutlinePick(){
  ORCMAP_EXPECT_EQ(hit.object_id,73u);
 }
 // A large marker can overlap the edge from the next world copy.
+/** Draw markers overlapping the viewport from adjacent world copies. */
 void TestWorldCopyTraversesOverlappingExtent(){
  OverlayScene scene; OverlayScratch scratch; CaptureTarget target;
  ORCMAP_EXPECT_TRUE(scene.AddLayer(1));
@@ -232,6 +248,7 @@ void TestWorldCopyTraversesOverlappingExtent(){
  ORCMAP_EXPECT_TRUE(target.polygons>=6);
 }
 // High-zoom projected coordinates must not saturate before clipping.
+/** Clip high-zoom paths before saturation to integer pixel coordinates. */
 void TestHighZoomPolylinePreservesSlope(){
  OverlayScene scene; OverlayScratch scratch; CaptureTarget target;
  ORCMAP_EXPECT_TRUE(scene.AddLayer(1));
@@ -249,6 +266,7 @@ void TestHighZoomPolylinePreservesSlope(){
  }
 }
 // Polygon outlines must obey the same projected-double clipping as paths.
+/** Apply precise clipping to outlines as well as polylines. */
 void TestHighZoomPolygonOutlinePreservesSlope(){
  OverlayScene scene; OverlayScratch scratch; CaptureTarget target;
  ORCMAP_EXPECT_TRUE(scene.AddLayer(1));
@@ -266,6 +284,7 @@ void TestHighZoomPolygonOutlinePreservesSlope(){
  }
 }
 // Repeated clipping of dense concave rings must stay inside warm scratch capacity.
+/** Bound clipping buffer growth for many concave polygon crossings. */
 void TestConcavePolygonWarmScratch(){
  OverlayScene scene;OverlayScratch scratch;CaptureTarget target;
  ORCMAP_EXPECT_TRUE(scene.AddLayer(1));
@@ -291,6 +310,7 @@ void TestConcavePolygonWarmScratch(){
  }
 }
 
+/** Run the complete generic-overlay regression suite. */
 void RunOverlayTests(){
  TestSceneBasics();TestInvalidAndLimits();TestMarkersAndSelection();
  TestRepeatedWorldPathsStayShort();TestClippingRequiresScissor();TestMarkerFillStaysInViewport();
