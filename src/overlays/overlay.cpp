@@ -169,7 +169,8 @@ double MarkerExtent(const OverlayObject& o) {
     shape_radius = std::sqrt(1.0 + 0.22 * 0.22);
   const double stroke = (o.style.outline || o.selected)
       ? (o.selected ? 2.0 : o.style.stroke_width_px) * 0.5 : 0.0;
-  return half_size * shape_radius + stroke + 1.0;  // Pixel rounding margin.
+  // Square stroke rasterization can extend diagonally beyond its corner.
+  return half_size * shape_radius + stroke*std::sqrt(2.0) + 1.0;
 }
 
 // Sutherland-Hodgman polygon clipping to the framebuffer/view rectangle.
