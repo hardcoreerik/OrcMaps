@@ -5,6 +5,19 @@ OrcMaps follows semantic versioning with pre-1.0 discipline (see
 change, but only in a new minor version, and every such change is listed here.
 Consumers pin a release by its full commit SHA (`docs/ORCSDR_INTEGRATION.md`).
 
+## Unreleased - generic geographic overlays (2026-11-07)
+
+- Generic public overlay API, render pass, bounded scene/layer storage, opaque
+  object picking, and configurable marker, path, area and geodesic geometry.
+- Added host and external-consumer tests, demo and documentation.
+- Review fixes: correct wrapped paths on repeated low-zoom world copies,
+  clip marker geometry, reject unsupported narrow-scissor drawing rather than
+  overwrite adjacent UI, and tighten geometry validation. Expanded regression tests.
+- v0.3.0 release pin unchanged; all 7 host and both external-consumer
+  tests passed in CI; ESP-IDF 5.5.4 P4/S3 compile/link gates also passed.
+  Physical hardware rendering and touch remain unverified.
+  Basemap restoration and alpha blending are not automatic.
+
 ## 0.3.0 - 2026-10-18
 
 Adds a second painting path that projects a feature once and then draws it any

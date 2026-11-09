@@ -1,0 +1,76 @@
+name: Generic overlays host, consumer, documentation and ESP-IDF
+on:
+  push:
+    paths:
+      - 'include/orcmap/overlay.hpp'
+      - 'src/overlays/**'
+      - 'tests/host/**'
+      - 'tests/consumer/**'
+      - 'CMakeLists.txt'
+      - 'examples/generic-overlays/**'
+      - '.github/workflows/overlay-host-tests.yml'
+      - 'STATUS.md'
+      - 'ARCHITECTURE.md'
+      - 'ROADMAP.md'
+      - 'CHANGELOG.md'
+      - 'PROJECT_TRUTH.md'
+      - 'README.md'
+      - 'docs/**'
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host-and-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Full host tests
+        run: |
+          cmake -S tests/host -B build-host -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build-host -j 2
+          ctest --test-dir build-host --output-on-failure
+      - name: Full external consumer tests
+        run: |
+          cmake -S tests/consumer -B build-consumer -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build-consumer -j 2
+          ctest --test-dir build-consumer --output-on-failure
+      - name: Standalone example
+        run: |
+          cmake -S examples/generic-overlays -B build-overlay-demo
+          cmake --build build-overlay-demo -j 2
+          ./build-overlay-demo/generic_overlay_demo
+  documentation-and-provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Documentation truth
+        run: |
+          python -m unittest discover -s tests -p 'test_documentation_truth.py' -v
+          python tools/check_documentation_truth.py
+      - name: Data provenance
+        run: |
+          python -m unittest discover -s tests -p 'test_data_provenance.py' -v
+          python tools/check_data_provenance.py
+  esp-idf-compile:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.5.4
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [esp32p4, esp32s3]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Compile and link OrcMaps
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py -C tests/esp_idf_link -B build-esp-idf-overlay-link set-target ${{ matrix.target }} build
+      - name: Verify miniz ROM-symbol separation
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          python tools/check_miniz_symbols.py build-esp-idf-overlay-link

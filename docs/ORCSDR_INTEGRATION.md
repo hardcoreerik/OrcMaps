@@ -349,3 +349,10 @@ storage.
   drawing its own.
 - A per-call allocator or heap-caps hook for pipeline buffers.
 - A `MapEngine` that owns the frame loop above.
+
+## Experimental overlay API (not in v0.3.0)
+
+The `feat/generic-geographic-overlays` branch adds `orcmap/overlay.hpp`.
+It has no OrcSDR dependency, and is not part of the published v0.3.0
+contract above. Consumers must pin a tested commit or future release.
+See `docs/OVERLAYS.md` for the API, bounds, redraw and validation limits.

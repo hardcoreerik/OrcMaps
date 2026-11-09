@@ -318,3 +318,16 @@ First tagged release: `v0.2.0`; current: `v0.3.0` (`idf_component.yml`
 declares `version: "0.3.0"`). 0.1.0 was the untagged in-development version. What
 changed is in `CHANGELOG.md`; the consumer contract is
 `docs/ORCSDR_INTEGRATION.md`.
+
+## Generic geographic overlays (feature branch, 2026-11-07)
+
+- [x] Generic bounded layer/object API and application-assigned ID picking
+- [x] Markers, tracks, polygons/holes, geographic circles, sectors and vectors
+- [x] Portable rendering and an independent external-consumer test
+- [x] Standalone sandbox C++17 and sanitizer tests
+- [x] Full host and consumer suites verified on GitHub Actions (7+2 tests)
+- [x] ESP-IDF 5.5.4 compile/link and miniz symbol gates pass on P4 and S3
+- [ ] ESP32-P4 hardware draw, touch, CPU and peak memory measured
+- [ ] Automatic dirty-region basemap restoration and alpha blending
+
+The engine does not parse AIS or other application protocols.

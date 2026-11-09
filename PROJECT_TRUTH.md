@@ -186,8 +186,9 @@ Base map style (orcmap::MapStyle)
 Rendered map (host-proof renderer; optional M5GFX DisplayTarget;
 hardware-verified static Tab5 Springfield frame)
         |
-Generic OrcMaps overlays (marker/icon/text/polyline/polygon/circle/route/
-        |                  track/waypoint -- src/overlays, not yet implemented)
+Generic OrcMaps overlays (markers, paths, polygons, circles, sectors,
+        |                  vectors, layers, picking -- src/overlays)
+        |  (automatic basemap restoration and text/icons remain planned)
 Application-specific overlays (aircraft/nodes/RF sites -- OrcSDR's own code)
 ```
 

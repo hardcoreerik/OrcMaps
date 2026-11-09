@@ -1,6 +1,15 @@
 # OrcMaps Current Status
 
-Last updated: 2026-09-14
+Last updated: 2026-11-07
+
+## Generic overlays (feature branch)
+
+`feat/generic-geographic-overlays` now contains a standalone API supporting
+markers, geographic polylines, polygon rings/holes, circles, sectors, vectors,
+layers, and hit-testing. Sandbox C++17 and ASan/UBSan tests passed; GitHub Actions then passed all
+7 host CTest targets and both external-consumer tests. ESP-IDF 5.5.4 compile/link and miniz symbol checks passed for ESP32-P4
+and ESP32-S3. Physical draw/touch, CPU and peak-memory measurements are
+still release gates. See `docs/OVERLAYS.md`.
 
 ## Current development focus
 
@@ -142,7 +151,7 @@ candidates). Neither is final. Do not finalize OpenMapTiles, Shortbread,
   — FeatureTile → ResolveFeatureStyle → Viewport → pixels, no M5GFX.
   Unclassified features skipped. Every ring of a polygon is filled even-odd,
   so multipolygon parts are all drawn and holes are subtracted.
-- Host test suite: **182 test functions** across the host sources; all seven
+- Host test suite: **199 test functions** across the host sources; all seven
   configured CTest programs pass at the map-quality development checkpoint.
 - `EnumerateVisibleTiles` (unique TileIds, X wrap, Y clamp).
   `TileScreenMap` uses shortest wrapped X delta. Overzoom still rejected.
@@ -270,7 +279,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Latest map-quality checkpoint: `100% tests passed, 0 tests failed out of 7`.
-There are 182 test functions defined across `tests/host/test_*.cpp`, distributed
+There are 199 test functions defined across `tests/host/test_*.cpp`, distributed
 among the general host and focused CTest programs. These cover geo math,
 PMTiles, style, attribution, MVT translation, viewport/clip/render/compression,
 profiles, labels, frame transforms and pack discovery. Separately configured

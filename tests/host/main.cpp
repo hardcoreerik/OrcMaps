@@ -13,6 +13,7 @@ void RunViewportTests();
 void RunClipTests();
 void RunStrokeTests();
 void RunRenderTests(const std::string& mvt_fixture_path);
+void RunOverlayTests();
 void RunCompressionTests(const std::string& pmtiles_path,
                          const std::string& mvt_path);
 void RunPackTests();
@@ -36,6 +37,7 @@ int main(int argc, char** argv) {
   RunClipTests();
   RunStrokeTests();
   RunRenderTests(mvt_fixture_path);
+  RunOverlayTests();
   RunCompressionTests(fixture_path, mvt_fixture_path);
   RunPackTests();
   RunPackDiscoveryTests();
