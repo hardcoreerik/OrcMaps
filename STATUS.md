@@ -151,7 +151,7 @@ candidates). Neither is final. Do not finalize OpenMapTiles, Shortbread,
   — FeatureTile → ResolveFeatureStyle → Viewport → pixels, no M5GFX.
   Unclassified features skipped. Every ring of a polygon is filled even-odd,
   so multipolygon parts are all drawn and holes are subtracted.
-- Host test suite: **192 test functions** across the host sources; all seven
+- Host test suite: **199 test functions** across the host sources; all seven
   configured CTest programs pass at the map-quality development checkpoint.
 - `EnumerateVisibleTiles` (unique TileIds, X wrap, Y clamp).
   `TileScreenMap` uses shortest wrapped X delta. Overzoom still rejected.
@@ -279,7 +279,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Latest map-quality checkpoint: `100% tests passed, 0 tests failed out of 7`.
-There are 192 test functions defined across `tests/host/test_*.cpp`, distributed
+There are 199 test functions defined across `tests/host/test_*.cpp`, distributed
 among the general host and focused CTest programs. These cover geo math,
 PMTiles, style, attribution, MVT translation, viewport/clip/render/compression,
 profiles, labels, frame transforms and pack discovery. Separately configured
