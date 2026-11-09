@@ -34,11 +34,14 @@ scene.Upsert(100, trail);
 
 // Paint map content with existing OrcMaps APIs before this pass.
 orcmap::OverlayScratch scratch;
-orcmap::RenderOverlays(scene, viewport, &target, &scratch);
-
-orcmap::OverlayHit hit;
-if (orcmap::HitTestOverlays(scene, viewport, touch_x, touch_y, &hit, &scratch)) {
-  // Your application resolves (hit.layer_id, hit.object_id) into its own data.
+if (!orcmap::RenderOverlays(scene, viewport, &target, &scratch)) {
+  // Report render failure through the application's logger or UI.
+  // Do not hit-test objects that may not have been drawn.
+} else {
+  orcmap::OverlayHit hit;
+  if (orcmap::HitTestOverlays(scene, viewport, touch_x, touch_y, &hit, &scratch)) {
+    // Your application resolves (hit.layer_id, hit.object_id) into its own data.
+  }
 }
 ```
 
@@ -51,7 +54,7 @@ The interface does not require an OrcSDR header, controller, or global state.
 ## Shapes and coordinates
 
 - `kMarker`: circle, square, diamond, triangle or arrow; heading rotates around
-  screen center; selection visibly enlarges and highlights it. `position` is
+  the projected marker position; selection visibly enlarges and highlights it. `position` is
   geographic, but size is pixels.
 - `kPolyline`: ordered geographic vertices, optionally closed, screen-stroked.
 - `kPolygon`: flattened vertex array with `ring_sizes`. Exterior is first;
@@ -63,7 +66,8 @@ The interface does not require an OrcSDR header, controller, or global state.
 - `kCircle`: geographic radius (`radius_m`), spherical-earth approximation
   with 48 segments (not a fixed pixel radius).
 - `kSector`: geographic radius and clockwise `start_bearing_deg` /
-  `sweep_deg` in `(0, 360]`; 48 arc segments plus center.
+  `sweep_deg` in `(0, 360]`; 48 arc segments. Partial sweeps include the
+  center and radial sides; a 360-degree sweep has no center or radial spokes.
 - `kVector`: bearing and length in meters from `position`.
 
 Every input latitude must fall within the supported Web Mercator range
@@ -93,9 +97,12 @@ marker; OrcMaps does not interpret the ID or show an application popup.
 `OverlayScene` **owns copies** of all object coordinates. Input vectors may
 be temporary. All access is synchronous; consumers serialize calls to
 `Upsert`, `RenderOverlays`, and `HitTestOverlays` themselves. No background
-threads or network operations are created. No per-frame allocation is
-expected after scratch warm-up; provide one `OverlayScratch` instance per
-simultaneous renderer. The implementation uses existing viewport math,
+threads or network operations are created. Reuse one `OverlayScratch` per
+simultaneous renderer to avoid reallocating overlay geometry after warm-up.
+Allocation-free full-frame drawing also requires reusing and warming the
+render target: for example, constructing a new `DisplayTarget` can allocate
+its polygon-crossing buffer. Other targets may allocate during paint
+regardless of overlay scratch capacity. The implementation uses existing viewport math,
 `RenderTarget`, and line clipping, and has no new renderer dependency.
 
 The scene sets `Dirty()` after an update and increments `Revision()`.
@@ -117,7 +124,8 @@ Overflow and invalid updates return false without changing the scene.
 Each object carries dynamic vectors (owned; allocations occur during updates),
 so memory is *bounded by these limits*, but exact RAM usage also depends on
 the C++ allocator and vector capacity. `OverlayScratch` reserves bounded
-geometry buffers at creation. Up to 32 neighboring world copies on either side may be
+geometry buffers at creation, including capacity for concave-clip crossings
+and every supported polygon ring. Up to 32 neighboring world copies on either side may be
 rendered on exceptionally wide low-zoom viewports; repeated copies are not
 unbounded. `Color.a` is stored, but the current M5GFX RGB565 adapter ignores
 alpha; translucent overlay blending remains a later integration task.
