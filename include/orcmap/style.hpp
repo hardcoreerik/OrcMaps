@@ -16,7 +16,7 @@ namespace orcmap {
 // FeatureKind is not defined here -- features own semantic identity,
 // styles own appearance. This file knows nothing about ADS-B aircraft,
 // LoRa nodes, or any other application overlay -- those are drawn through
-// the separate overlay API (src/overlays, not yet implemented) using their
+// the implemented, independent orcmap/overlay.hpp API using their
 // own colors. See "Overlays are NOT base-map styles" in docs/STYLING.md.
 
 // One feature category's visual rule. Zoom-gating lives here (min_zoom/
