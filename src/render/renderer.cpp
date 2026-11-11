@@ -1,5 +1,6 @@
 #include "orcmap/renderer.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 
@@ -62,6 +63,32 @@ bool ResolveDrawablePaint(const Feature& feature, const Viewport& viewport,
   if (!paint.visible) return false;
   *out = paint;
   return true;
+}
+
+bool FeatureMayReachClip(const Feature& feature, const TileScreenMap& map,
+                         const MapPaint& paint, const RenderTarget& target) {
+  // Tile clipping is optional in RenderTarget. Do not assume a legacy target
+  // accepted it; its reported clip is the conservative visible region.
+  const auto clip = target.ClipRect();
+  if (clip.width <= 0 || clip.height <= 0) return false;
+  bool have_point = false;
+  int32_t min_x = INT32_MAX, min_y = INT32_MAX, max_x = INT32_MIN, max_y = INT32_MIN;
+  for (const auto& path : feature.geometry.paths) for (const auto& p : path) {
+    have_point = true;
+    min_x = std::min(min_x, p.x); max_x = std::max(max_x, p.x);
+    min_y = std::min(min_y, p.y); max_y = std::max(max_y, p.y);
+  }
+  if (!have_point) return false;
+  int left, top, right, bottom;
+  ProjectLocal(map, min_x, min_y, &left, &top);
+  ProjectLocal(map, max_x, max_y, &right, &bottom);
+  // Retain brushes whose centerline is outside the clip. A spare pixel keeps
+  // endpoint rounding conservative; this never clips individual geometry.
+  const int pad = feature.geometry.type == GeomType::kLineString
+      ? RasterStrokeWidthPx(paint.width_px) / 2 + 1 : 1;
+  return int64_t(right) + pad >= clip.x && int64_t(bottom) + pad >= clip.y &&
+         int64_t(left) - pad < int64_t(clip.x) + clip.width &&
+         int64_t(top) - pad < int64_t(clip.y) + clip.height;
 }
 
 void RenderOneFeature(const Feature& feature, const TileScreenMap& map,
@@ -162,10 +189,8 @@ bool SameTile(TileId a, TileId b) {
   return a.z == b.z && a.x == b.x && a.y == b.y;
 }
 
-bool RenderFeatureAtImpl(const Feature& feature, const TilePlacement& placement,
-                         const Viewport& viewport, const MapStyle& style,
-                         RenderTarget* target, RenderScratch& scratch) {
-  if (target == nullptr) return false;
+bool PrepareMap(const Feature& feature, const TilePlacement& placement,
+                const Viewport& viewport, RenderScratch& scratch) {
   if (!ZoomIsValid(viewport.zoom)) return false;
   if (placement.tile.z != viewport.zoom) return false;
   const uint32_t extent = feature.extent == 0 ? 4096u : feature.extent;
@@ -187,7 +212,13 @@ bool RenderFeatureAtImpl(const Feature& feature, const TilePlacement& placement,
     scratch.extent = extent;
     scratch.viewport = viewport;
   }
+  return true;
+}
 
+bool RenderFeatureAtImpl(const Feature& feature, const TilePlacement& placement,
+                         const Viewport& viewport, const MapStyle& style,
+                         RenderTarget* target, RenderScratch& scratch) {
+  if (target == nullptr || !PrepareMap(feature, placement, viewport, scratch)) return false;
   RenderOneFeature(feature, scratch.map, viewport, style, target,
                    &scratch.poly_xy);
   return true;
@@ -375,16 +406,127 @@ bool RenderFeatureTileAt(const FeatureTile& features,
   uint32_t prepared_extent = 0;
   bool have_map = false;
   RenderScratch scratch;
-  for (const Feature& feature : features.features) {
-    const uint32_t extent = feature.extent == 0 ? 4096u : feature.extent;
-    if (!have_map || extent != prepared_extent) {
-      if (!MakeTilePlacementScreenMap(viewport, placement, extent, &map)) {
+  for (bool fills : {true, false}) {
+    for (const Feature& feature : features.features) {
+      if ((feature.geometry.type == GeomType::kPolygon) != fills) continue;
+      const uint32_t extent = feature.extent == 0 ? 4096u : feature.extent;
+      if (!have_map || extent != prepared_extent) {
+        if (!MakeTilePlacementScreenMap(viewport, placement, extent, &map)) {
+          return false;
+        }
+        prepared_extent = extent;
+        have_map = true;
+      }
+      RenderOneFeature(feature, map, viewport, style, target, &scratch.poly_xy);
+    }
+  }
+  return true;
+}
+
+void OrderedRenderScratch::Reset() {
+  xy.clear();
+  paths.clear();
+  // Polygon workspace previously lived for one tile. Do not retain a dense
+  // polygon alongside the reusable, separately bounded stroke queue.
+  std::vector<int>().swap(render.poly_xy);
+  status = OrderedRenderStatus::kReady;
+  peak_bytes = 0;
+}
+
+size_t OrderedRenderScratch::RetainedBytes() const {
+  return xy.capacity() * sizeof(int) + paths.capacity() * sizeof(StrokePath);
+}
+
+namespace {
+template<class T>
+void ReserveBounded(std::vector<T>& values, size_t needed, size_t limit) {
+  if (needed > values.capacity()) {
+    const size_t grown = values.capacity() > limit / 2 ? limit : values.capacity() * 2;
+    values.reserve(std::max(needed, grown));
+  }
+}
+}
+
+bool RenderOrderedFeatureAt(const Feature& feature, const TilePlacement& placement,
+                            const Viewport& viewport, const MapStyle& style,
+                            RenderTarget* target, OrderedRenderScratch* scratch) {
+  if (!scratch || scratch->status != OrderedRenderStatus::kReady) return false;
+  if (!target || !PrepareMap(feature, placement, viewport, scratch->render)) {
+    scratch->status = OrderedRenderStatus::kInvalidInput;
+    return false;
+  }
+  MapPaint paint;
+  if (!ResolveDrawablePaint(feature, viewport, style, &paint)) return true;
+  if (!FeatureMayReachClip(feature, scratch->render.map, paint, *target)) return true;
+  const auto type = feature.geometry.type;
+  if (type == GeomType::kPolygon) {
+    RenderOneFeature(feature, scratch->render.map, viewport, style, target,
+                     &scratch->render.poly_xy);
+    return true;
+  }
+  if (type != GeomType::kLineString && type != GeomType::kPoint) return true;
+  size_t points = scratch->xy.size() / 2, paths = scratch->paths.size();
+  for (const auto& path : feature.geometry.paths) {
+    if (path.size() < (type == GeomType::kPoint ? 1u : 2u)) continue;
+    if (path.size() > OrderedRenderScratch::kMaxPoints - points ||
+        paths == OrderedRenderScratch::kMaxPaths) {
+      scratch->status = OrderedRenderStatus::kCapacityExceeded;
+      return false;
+    }
+    points += path.size();
+    ++paths;
+  }
+  // Mark incomplete before allocation so a caught exception cannot flush a
+  // partially appended feature. The owning worker discards this whole frame.
+  scratch->status = OrderedRenderStatus::kInvalidInput;
+  ReserveBounded(scratch->xy, points * 2, OrderedRenderScratch::kMaxPoints * 2);
+  ReserveBounded(scratch->paths, paths, OrderedRenderScratch::kMaxPaths);
+  const PixelRect clip = IntersectPixelRects(target->ClipRect(),
+      TileScreenRect(scratch->render.map, viewport));
+  for (const auto& path : feature.geometry.paths) {
+    if (path.size() < (type == GeomType::kPoint ? 1u : 2u)) continue;
+    scratch->paths.push_back({scratch->xy.size() / 2, path.size(), paint.color,
+                              paint.width_px, clip, type});
+    for (const auto& point : path) {
+      int x, y;
+      ProjectLocal(scratch->render.map, point.x, point.y, &x, &y);
+      scratch->xy.push_back(x);
+      scratch->xy.push_back(y);
+    }
+  }
+  scratch->peak_bytes = std::max(scratch->peak_bytes,
+      scratch->xy.size() * sizeof(int) + scratch->paths.size() * sizeof(OrderedRenderScratch::StrokePath));
+  scratch->status = OrderedRenderStatus::kReady;
+  return true;
+}
+
+bool FinishOrderedTile(OrderedRenderScratch* scratch, RenderTarget* target,
+                       bool (*service)(void*), void* context) {
+  if (!scratch) return false;
+  struct Discard {
+    OrderedRenderScratch& scratch;
+    ~Discard() { scratch.xy.clear(); scratch.paths.clear(); }
+  } discard{*scratch};
+  if (!target) scratch->status = OrderedRenderStatus::kInvalidInput;
+  if (scratch->status != OrderedRenderStatus::kReady) return false;
+  size_t work = 0;
+  for (const auto& path : scratch->paths) {
+    ScopedClip clip(target, path.clip);
+    const size_t first = path.first_point * 2;
+    const size_t begin = path.type == GeomType::kPoint ? 0 : 1;
+    for (size_t p = begin; p < path.point_count; ++p) {
+      if (work++ % 128 == 0 && service && !service(context)) {
+        scratch->status = OrderedRenderStatus::kCancelled;
         return false;
       }
-      prepared_extent = extent;
-      have_map = true;
+      const size_t i = first + p * 2;
+      if (path.type == GeomType::kPoint) {
+        target->DrawPoint(scratch->xy[i], scratch->xy[i+1], path.color);
+      } else {
+        target->DrawLine(scratch->xy[i-2], scratch->xy[i-1], scratch->xy[i],
+                          scratch->xy[i+1], path.color, path.width_px);
+      }
     }
-    RenderOneFeature(feature, map, viewport, style, target, &scratch.poly_xy);
   }
   return true;
 }

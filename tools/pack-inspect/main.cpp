@@ -102,6 +102,12 @@ const char* KindName(orcmap::FeatureKind k) {
       return "rail";
     case orcmap::FeatureKind::kBoundary:
       return "boundary";
+    case orcmap::FeatureKind::kBoundaryCountry:
+      return "boundary_country";
+    case orcmap::FeatureKind::kBoundaryRegion:
+      return "boundary_region";
+    case orcmap::FeatureKind::kBoundaryLocal:
+      return "boundary_local";
     case orcmap::FeatureKind::kBuilding:
       return "building";
     case orcmap::FeatureKind::kPark:

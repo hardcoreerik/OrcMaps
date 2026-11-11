@@ -1,11 +1,13 @@
 """Tests for the pin-to-pack provisioner used by the OrcSDR setup wizard."""
 
 import argparse
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 
 SCRIPT = Path(__file__).parents[1] / "tools" / "pack-builder" / "provision_pack.py"
@@ -160,7 +162,9 @@ class StagingTests(unittest.TestCase):
             work.mkdir()
             output = work / "pin-eugene.pmtiles"
             output.write_bytes(b"archive")
-            (work / "pin-eugene.manifest.json").write_text("{}", encoding="utf-8")
+            (work / "pin-eugene.manifest.json").write_text(json.dumps({
+                "size_bytes": 7, "output_sha256": hashlib.sha256(b"archive").hexdigest()
+            }), encoding="utf-8")
             (work / "pin-eugene.sha256").write_text("hash\n", encoding="ascii")
 
             card = Path(directory) / "card" / PROVISION.DEVICE_PACK_DIR
@@ -172,6 +176,107 @@ class StagingTests(unittest.TestCase):
             stems = {n.split(".")[0] for n in names}
             self.assertEqual(stems, {"pin-eugene"})
             self.assertTrue((card / "pin-eugene.pmtiles").is_file())
+            self.assertEqual((card / "pin-eugene.sha256").read_text(encoding="ascii"),
+                             hashlib.sha256(b"archive").hexdigest() + "  pin-eugene.pmtiles\n")
+
+    def fixture(self, directory):
+        work = Path(directory) / "work"
+        work.mkdir()
+        output = work / "map.pmtiles"
+        output.write_bytes(b"new archive")
+        output.with_suffix(".manifest.json").write_text(json.dumps({
+            "size_bytes": 11,
+            "output_sha256": hashlib.sha256(b"new archive").hexdigest()
+        }), encoding="utf-8")
+        return output, Path(directory) / "card"
+
+    def test_existing_archive_or_manifest_is_never_overwritten(self):
+        for suffix in (".pmtiles", ".manifest.json", ".sha256"):
+            with self.subTest(suffix=suffix), tempfile.TemporaryDirectory() as directory:
+                output, card = self.fixture(directory)
+                card.mkdir()
+                existing = card / ("map" + suffix)
+                existing.write_bytes(b"valuable existing data")
+                with self.assertRaises(FileExistsError):
+                    PROVISION.stage(output, card)
+                self.assertEqual(existing.read_bytes(), b"valuable existing data")
+                self.assertEqual(list(card.iterdir()), [existing])
+
+    def test_hash_mismatch_never_publishes_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output, card = self.fixture(directory)
+            output.write_bytes(b"bad archive")  # same length, wrong bytes
+            with self.assertRaises(ValueError):
+                PROVISION.stage(output, card)
+            self.assertFalse(list(card.glob("*.manifest.json")))
+
+    def test_copy_failure_preserves_other_packs_and_publishes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output, card = self.fixture(directory)
+            card.mkdir()
+            other = card / "old.manifest.json"
+            other.write_bytes(b"existing")
+            with mock.patch.object(PROVISION.shutil, "copy2", side_effect=OSError("SD removed")):
+                with self.assertRaises(OSError):
+                    PROVISION.stage(output, card)
+            self.assertEqual(list(card.iterdir()), [other])
+
+    def test_manifest_is_last_published_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output, card = self.fixture(directory)
+            published = []
+            rename = Path.rename
+            def record(path, target):
+                published.append(Path(target).name)
+                return rename(path, target)
+            with mock.patch.object(Path, "rename", record):
+                PROVISION.stage(output, card)
+            self.assertEqual(published[-1], "map.manifest.json")
+
+    def test_missing_manifest_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output, card = self.fixture(directory)
+            output.with_suffix(".manifest.json").unlink()
+            with self.assertRaises(FileNotFoundError):
+                PROVISION.stage(output, card)
+
+    def test_activation_failure_cleans_only_this_attempt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output, card = self.fixture(directory)
+            rename = Path.rename
+            def fail_manifest(path, target):
+                if Path(target).name.endswith(".manifest.json"):
+                    raise OSError("manifest rename failed")
+                return rename(path, target)
+            with mock.patch.object(Path, "rename", fail_manifest):
+                with self.assertRaises(OSError):
+                    PROVISION.stage(output, card)
+            self.assertEqual(list(card.iterdir()), [])
+
+    def test_copy_corruption_is_detected_before_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output, card = self.fixture(directory)
+            def corrupt(source, target):
+                Path(target).write_bytes(b"bad archive")
+            with mock.patch.object(PROVISION.shutil, "copy2", corrupt):
+                with self.assertRaises(ValueError):
+                    PROVISION.stage(output, card)
+            self.assertEqual(list(card.iterdir()), [])
+
+    def test_provisioner_cannot_build_into_the_live_pack_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.manifest.json"
+            source.write_text(json.dumps(oregon_manifest()), encoding="utf-8")
+            source.with_name("source.pmtiles").write_bytes(b"archive")
+            with self.assertRaisesRegex(ValueError, "build outside"):
+                PROVISION.main([
+                    "--source-manifest", str(source), "--lat", "44", "--lon", "-123",
+                    "--radius-km", "50", "--name", "home", "--sd-root", str(root),
+                    "--work-dir", str(root / PROVISION.DEVICE_PACK_DIR),
+                    "--builder-commit", "test",
+                ])
+            self.assertFalse((root / PROVISION.DEVICE_PACK_DIR).exists())
 
     def test_manifest_loader_rejects_an_incomplete_manifest(self):
         with tempfile.TemporaryDirectory() as directory:

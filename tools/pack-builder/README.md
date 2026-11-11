@@ -184,7 +184,25 @@ It writes `<sd-root>/orcmaps/<name>.pmtiles` plus the `.manifest.json` and
 `.sha256` sidecars **on the same filename stem**, which is how
 `src/core/pack_discovery.cpp` pairs an archive to its manifest. Renaming one
 without the others is the single mistake that silently breaks discovery, so
-staging moves all three or none.
+staging verifies the copied archive against the manifest's size and SHA-256,
+then publishes the archive and checksum before publishing the manifest last.
+The checksum sidecar is generated from the verified digest. Existing files on
+any of those three names are refused, including when `--force` was used for
+the separate build. Use a new versioned name rather than replacing a live pack.
+
+Build output defaults to the host's working directory. `--work-dir` must not
+be the card's `orcmaps` directory: direct extraction there bypasses staging.
+Remove the card from the device and give this tool exclusive access while
+provisioning, then safely eject it before reinserting it.
+
+Staging uses a hidden directory and per-name reservation. Ordinary copy/hash/
+rename failures remove only files created by that attempt. Sudden power loss
+can leave a hidden `.install-<name>` reservation or unreferenced archive; do
+not delete unrelated files or overwrite them to retry. Inspect the interrupted
+attempt offline, or choose a new versioned name. File flushes and manifest-last
+publication do not establish FAT directory durability under power loss; that
+still requires hardware fault testing. This is host-side provisioning, not
+the device's future resumable network installer or trusted catalog.
 
 Behaviour that matters:
 

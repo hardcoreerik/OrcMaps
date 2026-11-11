@@ -21,10 +21,12 @@ import datetime as dt
 import importlib.util
 import json
 import math
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 
 BUILDER_PATH = Path(__file__).with_name("build_regional_pack.py")
 _SPEC = importlib.util.spec_from_file_location("orcmaps_regional_pack_builder",
@@ -194,23 +196,65 @@ def zoom_range(source_manifest: dict, options: argparse.Namespace) -> tuple[int,
 
 
 def stage(output: Path, destination: Path) -> list[Path]:
-    """Copy archive and sidecars into the device directory, stems intact.
+    """Verify copied bytes, then publish the manifest last, without replacement.
 
-    Renaming the archive without renaming its manifest is the one mistake
-    that silently breaks discovery, so every file moves under the same stem
-    or none does.
+    Requires exclusive host access to the unmounted device card. The manifest
+    is discovery's commit marker; an interrupted copy must never expose it.
     """
+    if output.suffix != ARCHIVE_SUFFIX:
+        raise ValueError("archive must end in .pmtiles")
+    manifest_path = output.with_suffix(MANIFEST_SUFFIX)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    expected_size = manifest.get("size_bytes")
+    expected_hash = manifest.get("output_sha256", "")
+    if (type(expected_size) is not int or expected_size <= 0 or
+            not isinstance(expected_hash, str) or len(expected_hash) != 64 or
+            any(c not in "0123456789abcdefABCDEF" for c in expected_hash)):
+        raise ValueError("manifest requires archive size and SHA-256")
+    if output.stat().st_size != expected_size:
+        raise ValueError("archive size differs from manifest")
     destination.mkdir(parents=True, exist_ok=True)
-    copied: list[Path] = []
-    for suffix in (ARCHIVE_SUFFIX, MANIFEST_SUFFIX, ".sha256"):
-        candidate = (output.with_suffix("").with_suffix(suffix)
-                     if suffix != ARCHIVE_SUFFIX else output)
-        if not candidate.is_file():
-            continue
-        target = destination / candidate.name
-        shutil.copy2(candidate, target)
-        copied.append(target)
-    return copied
+    targets = [destination / output.with_suffix(suffix).name
+               for suffix in (ARCHIVE_SUFFIX, ".sha256", MANIFEST_SUFFIX)]
+    # A per-name reservation prevents concurrent provisioner invocations.
+    lock = destination / (".install-" + output.stem)
+    lock.mkdir()
+    published: list[Path] = []
+    try:
+        for target in targets:
+            if target.exists() or target.is_symlink():
+                raise FileExistsError(f"refusing to replace existing pack file: {target}")
+        with tempfile.TemporaryDirectory(prefix=".stage-", dir=destination) as folder:
+            staging = Path(folder)
+            archive = staging / output.name
+            shutil.copy2(output, archive)
+            if (archive.stat().st_size != expected_size or
+                    builder.sha256(archive) != expected_hash.lower()):
+                raise ValueError("copied archive SHA-256 differs from manifest")
+            # Bind the checksum to the actual copied filename; an optional
+            # source .sha256 is not trusted as a second source of identity.
+            (staging / targets[1].name).write_text(
+                f"{expected_hash.lower()}  {output.name}\n", encoding="ascii")
+            (staging / targets[2].name).write_text(
+                json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8")
+            for target in targets:
+                pending = staging / target.name
+                with pending.open("r+b") as handle:
+                    os.fsync(handle.fileno())
+                if target.exists() or target.is_symlink():
+                    raise FileExistsError(f"pack file appeared during staging: {target}")
+                pending.rename(target)
+                published.append(target)
+        return published
+    except BaseException:
+        # Only this attempt's new files are removed. Existing packs are never
+        # renamed, truncated or used as rollback scratch space.
+        for target in reversed(published):
+            target.unlink(missing_ok=True)
+        raise
+    finally:
+        lock.rmdir()
 
 
 def parser() -> argparse.ArgumentParser:
@@ -276,7 +320,9 @@ def main(argv: list[str] | None = None) -> int:
     options.min_zoom, options.max_zoom = low, high
 
     sd_dir = (options.sd_root / DEVICE_PACK_DIR) if options.sd_root else None
-    work_dir = options.work_dir or (sd_dir if sd_dir else Path.cwd())
+    work_dir = options.work_dir or Path.cwd()
+    if sd_dir is not None and work_dir.resolve() == sd_dir.resolve():
+        raise ValueError("build outside the device pack directory, then stage")
     output = work_dir / f"{options.name}{ARCHIVE_SUFFIX}"
 
     display_name = options.display_name or options.name

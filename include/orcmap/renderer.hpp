@@ -47,6 +47,8 @@ bool ClearMapBackground(const Viewport& viewport, const MapStyle& style,
 // - source_tile.z != viewport.zoom (overzoom is not implemented)
 //
 // Features with kind_assigned == false are skipped (not guessed).
+// Polygons are painted before strokes/points, preserving source order within
+// each group. Archive layer order cannot hide borders/roads beneath later fills.
 // Label kinds (kLabelPrimary/Secondary/Muted) are skipped until text
 // rendering exists -- they are not drawn as placeholder point pixels.
 // A polygon feature's rings are grouped into parts (a ring that winds like the
@@ -84,6 +86,44 @@ bool RenderFeatureAt(const Feature& feature, const TilePlacement& placement,
 bool RenderFeatureAt(const Feature& feature, const TilePlacement& placement,
                      const Viewport& viewport, const MapStyle& style,
                      RenderTarget* target, RenderScratch* scratch);
+
+// Ordered streaming composition: fills first, strokes/points last. Immediate
+// RenderFeatureAt deliberately retains its caller-order contract. Reuse one
+// queue for all placements of a source tile; flush only after successful decode.
+// Reset on every tile and on decode failure/cancellation. Capacity is retained
+// for reuse and released by destruction (no whole decoded tile is retained).
+enum class OrderedRenderStatus { kReady, kCapacityExceeded, kCancelled, kInvalidInput };
+struct OrderedRenderScratch {
+  static constexpr size_t kMaxPoints = 65536;
+  static constexpr size_t kMaxPaths = 4096;
+  struct StrokePath {
+    size_t first_point = 0, point_count = 0;
+    Color color{};
+    float width_px = 1;
+    PixelRect clip;
+    GeomType type = GeomType::kLineString;
+  };
+  RenderScratch render;
+  std::vector<int> xy;
+  std::vector<StrokePath> paths;
+  OrderedRenderStatus status = OrderedRenderStatus::kReady;
+  size_t peak_bytes = 0;
+  void Reset();
+  size_t RetainedBytes() const;
+};
+
+// Capacity failure rejects the entire feature, leaves the previous queue
+// intact, poisons this tile, and returns false. bad_alloc propagates; discard
+// the tile and Reset before reuse. Render into an unpublished frame throughout.
+bool RenderOrderedFeatureAt(const Feature& feature, const TilePlacement& placement,
+                            const Viewport& viewport, const MapStyle& style,
+                            RenderTarget* target, OrderedRenderScratch* scratch);
+
+// Restores the caller's clip and clears queued counts on every exit. The optional
+// service callback is checked at least every 128 segments/points, including long
+// paths; false cancels. A false result must never be published as a ready frame.
+bool FinishOrderedTile(OrderedRenderScratch* scratch, RenderTarget* target,
+                       bool (*service)(void*) = nullptr, void* context = nullptr);
 
 // ---------------------------------------------------------------------------
 // Screen-space cache

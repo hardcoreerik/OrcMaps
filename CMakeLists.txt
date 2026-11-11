@@ -23,6 +23,7 @@ idf_component_register(
          "src/tiles/pmtiles_reader.cpp"
          "src/tiles/mvt_decoder.cpp"
          "src/tiles/mvt_stream.cpp"
+         "src/tiles/feature_replay.cpp"
          "src/tiles/mvt_translate.cpp"
          "src/tiles/mvt_classify_experimental.cpp"
          "src/tiles/compression.cpp"

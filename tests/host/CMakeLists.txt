@@ -64,6 +64,15 @@ target_include_directories(orcmap_host_tests PRIVATE
 )
 
 enable_testing()
+add_executable(orcmap_feature_replay_tests test_feature_replay.cpp
+    ${ORCMAP_ROOT}/src/tiles/feature_replay.cpp)
+target_include_directories(orcmap_feature_replay_tests PRIVATE ${ORCMAP_ROOT}/include)
+if(MSVC)
+  target_compile_options(orcmap_feature_replay_tests PRIVATE /UNDEBUG)
+else()
+  target_compile_options(orcmap_feature_replay_tests PRIVATE -UNDEBUG)
+endif()
+add_test(NAME orcmap_feature_replay_tests COMMAND orcmap_feature_replay_tests)
 add_executable(orcmap_pack_tests pack_main.cpp test_pack.cpp test_pack_discovery.cpp
     ${ORCMAP_ROOT}/src/core/geo.cpp ${ORCMAP_ROOT}/src/core/viewport.cpp
     ${ORCMAP_ROOT}/src/core/pack.cpp ${ORCMAP_ROOT}/src/core/pack_json.cpp
@@ -111,6 +120,16 @@ add_executable(orcmap_tile_composition_tests test_tile_composition.cpp
 target_include_directories(orcmap_tile_composition_tests PRIVATE
     ${ORCMAP_ROOT}/include ${ORCMAP_ROOT}/adapters/host)
 add_test(NAME orcmap_tile_composition_tests COMMAND orcmap_tile_composition_tests)
+add_executable(orcmap_paint_order_tests test_paint_order.cpp
+    ${ORCMAP_ROOT}/src/core/geo.cpp
+    ${ORCMAP_ROOT}/src/core/viewport.cpp
+    ${ORCMAP_ROOT}/src/render/style.cpp
+    ${ORCMAP_ROOT}/src/render/renderer.cpp
+    ${ORCMAP_ROOT}/src/render/clip.cpp
+    ${ORCMAP_ROOT}/adapters/host/framebuffer_target.cpp)
+target_include_directories(orcmap_paint_order_tests PRIVATE
+    ${ORCMAP_ROOT}/include ${ORCMAP_ROOT}/adapters/host)
+add_test(NAME orcmap_paint_order_tests COMMAND orcmap_paint_order_tests)
 add_test(
     NAME orcmap_host_tests
     COMMAND orcmap_host_tests ${ORCMAP_ROOT}/tests/fixtures/tiny.pmtiles

@@ -1,6 +1,7 @@
 #include "orcmap/experimental/mvt_classify.hpp"
 
 #include <cstring>
+#include <cmath>
 
 namespace orcmap {
 namespace experimental {
@@ -25,6 +26,50 @@ const char* StringProp(const Feature& feature, const char* key) {
     return nullptr;
   }
   return std::get<std::string>(*value).c_str();
+}
+
+// Explicit source categories, not substring guesses ("county region" occurs
+// in Protomaps). A combined boundary takes its highest administrative level.
+bool HasKindToken(std::string_view kinds, std::string_view expected) {
+  while (!kinds.empty()) {
+    const size_t end = kinds.find(' ');
+    if (kinds.substr(0, end) == expected) return true;
+    if (end == std::string_view::npos) break;
+    kinds.remove_prefix(end + 1);
+  }
+  return false;
+}
+
+FeatureKind ProtomapsBoundaryKind(std::string_view kinds) {
+  if (HasKindToken(kinds, "country")) return FeatureKind::kBoundaryCountry;
+  if (HasKindToken(kinds, "region")) return FeatureKind::kBoundaryRegion;
+  if (HasKindToken(kinds, "county") || HasKindToken(kinds, "locality")) {
+    return FeatureKind::kBoundaryLocal;
+  }
+  return FeatureKind::kBoundary;
+}
+
+FeatureKind OpenMapTilesBoundaryKind(const Feature& feature) {
+  const PropertyValue* value = FindProperty(feature, "admin_level");
+  if (value == nullptr) return FeatureKind::kBoundary;
+  int level = 0;
+  if (const auto* number = std::get_if<int64_t>(value)) {
+    if (*number >= 2 && *number <= 10) level = static_cast<int>(*number);
+  } else if (const auto* number = std::get_if<uint64_t>(value)) {
+    if (*number >= 2 && *number <= 10) level = static_cast<int>(*number);
+  } else if (const auto* number = std::get_if<double>(value)) {
+    if (std::isfinite(*number) && *number >= 2 && *number <= 10 &&
+        std::floor(*number) == *number) level = static_cast<int>(*number);
+  } else if (const auto* text = std::get_if<std::string>(value)) {
+    if (*text == "10") level = 10;
+    else if (text->size() == 1 && (*text)[0] >= '2' && (*text)[0] <= '9') {
+      level = (*text)[0] - '0';
+    }
+  }
+  if (level == 2) return FeatureKind::kBoundaryCountry;
+  if (level == 3 || level == 4) return FeatureKind::kBoundaryRegion;
+  if (level >= 5) return FeatureKind::kBoundaryLocal;
+  return FeatureKind::kBoundary;
 }
 
 // OpenMapTiles `transportation` (measured Springfield 97477 tiles):
@@ -105,8 +150,8 @@ bool ClassifyProtomapsV4(const Feature& feature, FeatureKind* out) {
     return true;
   }
   if (feature.layer == "boundaries" && geometry == GeomType::kLineString) {
-    // Preserve kind and numeric kind_detail for later hierarchy styling.
-    *out = FeatureKind::kBoundary;
+    // kind_detail remains intact; hierarchy comes from documented kind tokens.
+    *out = ProtomapsBoundaryKind(kind);
     return true;
   }
   if (feature.layer == "water") {
@@ -223,7 +268,13 @@ bool AssignFeatureKinds(FeatureTile* tile) {
 bool TryClassifyFeatureForProfile(std::string_view schema_version,
                                   const Feature& feature, FeatureKind* kind) {
   if (kind == nullptr) return false;
-  if (schema_version == "openmaptiles-3.16") return TryClassifyFeature(feature, kind);
+  if (schema_version == "openmaptiles-3.16") {
+    if (!TryClassifyFeature(feature, kind)) return false;
+    if (feature.layer == "boundary" || feature.layer == "boundaries") {
+      *kind = OpenMapTilesBoundaryKind(feature);
+    }
+    return true;
+  }
   if (schema_version == "protomaps-v4") return ClassifyProtomapsV4(feature, kind);
   if (schema_version != "orcmaps-overview-1") return false;
   if (feature.layer == "land") *kind = FeatureKind::kLand;

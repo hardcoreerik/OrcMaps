@@ -36,19 +36,18 @@ const char* ValidationName(orcmap::PackValidationError error) {
 }
 
 // Compares the manifest's declared bounds against the archive's own PMTiles
-// header. A mismatch is not fatal -- the manifest is authoritative for
-// resolution -- but claiming coverage the archive does not have produces
-// missing tiles at runtime, so it is worth reporting.
-void ReportHeaderAgreement(const orcmap::PackManifest& pack) {
+// header. Publishing coverage the archive cannot provide must fail preflight,
+// even though cheap runtime discovery deliberately does not open every archive.
+bool ReportHeaderAgreement(const orcmap::PackManifest& pack) {
   orcmap::host::FileByteSource bytes(pack.archive_path);
   if (!bytes.Valid()) {
     std::printf("      header:   UNREADABLE\n");
-    return;
+    return false;
   }
   orcmap::PmTilesReader reader(&bytes);
   if (!reader.Open()) {
     std::printf("      header:   not a valid PMTiles container\n");
-    return;
+    return false;
   }
   const orcmap::PmTilesHeader& h = reader.Header();
   const double min_lon = h.min_lon_e7 / 1e7;
@@ -70,7 +69,8 @@ void ReportHeaderAgreement(const orcmap::PackManifest& pack) {
                 "                the resolver will select this pack where it "
                 "has no tiles\n");
   }
-  if (pack.min_zoom < h.min_zoom || pack.max_zoom > h.max_zoom) {
+  const bool zoom_wider = pack.min_zoom < h.min_zoom || pack.max_zoom > h.max_zoom;
+  if (zoom_wider) {
     std::printf("      WARNING:  manifest zoom range z%u-%u exceeds the "
                 "archive's z%u-%u\n",
                 static_cast<unsigned>(pack.min_zoom),
@@ -78,6 +78,7 @@ void ReportHeaderAgreement(const orcmap::PackManifest& pack) {
                 static_cast<unsigned>(h.min_zoom),
                 static_cast<unsigned>(h.max_zoom));
   }
+  return !manifest_wider && !zoom_wider;
 }
 
 }  // namespace
@@ -95,6 +96,7 @@ int main(int argc, char** argv) {
   const bool clean = orcmap::DiscoverPacks(filesystem, dir, &catalog, &report);
 
   std::printf("OrcMaps pack verification\n=========================\n");
+  std::printf("preflight_contract: header-coverage-v1\n");
   std::printf("directory: %s\n\n", dir.c_str());
 
   if (!report.directory_listed) {
@@ -107,6 +109,7 @@ int main(int argc, char** argv) {
               static_cast<unsigned>(report.packs_added),
               static_cast<unsigned>(report.rejected.size()));
 
+  bool headers_valid = true;
   for (const orcmap::PackManifest& pack : catalog.Packs()) {
     std::printf("  INSTALLED %s\n", pack.region_id.c_str());
     std::printf("      pack_id:  %s\n", pack.pack_id.c_str());
@@ -118,7 +121,7 @@ int main(int argc, char** argv) {
                 static_cast<unsigned>(pack.max_zoom), pack.bounds.min_lon_deg,
                 pack.bounds.min_lat_deg, pack.bounds.max_lon_deg,
                 pack.bounds.max_lat_deg);
-    ReportHeaderAgreement(pack);
+    if (!ReportHeaderAgreement(pack)) headers_valid = false;
     if (pack.attribution.empty()) {
       std::printf("      credits:  (none required)\n");
     }
@@ -148,6 +151,10 @@ int main(int argc, char** argv) {
 
   if (report.packs_added == 0) {
     std::printf("RESULT: NO USABLE PACKS -- a device would show no map.\n");
+    return 1;
+  }
+  if (!headers_valid) {
+    std::printf("RESULT: FAILED -- archive header or declared coverage rejected.\n");
     return 1;
   }
   if (!clean) {

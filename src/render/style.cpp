@@ -31,6 +31,12 @@ void ApplyStandardZoomGating(MapStyle* style) {
   style->rules[static_cast<size_t>(K::kMinorRoad)].min_zoom = 12;
   style->rules[static_cast<size_t>(K::kRail)].min_zoom = 9;
   style->rules[static_cast<size_t>(K::kBoundary)].min_zoom = 0;
+  style->rules[static_cast<size_t>(K::kBoundaryCountry)].min_zoom = 0;
+  style->rules[static_cast<size_t>(K::kBoundaryCountry)].width_px = 2.0f;
+  style->rules[static_cast<size_t>(K::kBoundaryRegion)].min_zoom = 4;
+  style->rules[static_cast<size_t>(K::kBoundaryRegion)].width_px = 1.5f;
+  style->rules[static_cast<size_t>(K::kBoundaryLocal)].min_zoom = 6;
+  style->rules[static_cast<size_t>(K::kBoundaryLocal)].width_px = 1.0f;
   style->rules[static_cast<size_t>(K::kBuilding)].min_zoom = 15;
   style->rules[static_cast<size_t>(K::kPark)].min_zoom = 6;
   style->rules[static_cast<size_t>(K::kAirport)].min_zoom = 5;
@@ -43,7 +49,7 @@ MapStyle BuildOrcSdrDark() {
   MapStyle s;
   s.id = "orcsdr-dark";
   s.display_name = "OrcSDR Dark";
-  s.version = 1;
+  s.version = 3;
   s.label_scale = 1.0f;
   s.label_priority_threshold = 0;
 
@@ -65,6 +71,9 @@ MapStyle BuildOrcSdrDark() {
   s.rules[static_cast<size_t>(K::kMinorRoad)].width_px = 1.0f;
   s.rules[static_cast<size_t>(K::kRail)].color = Color::Rgb(42, 47, 51);
   s.rules[static_cast<size_t>(K::kBoundary)].color = Color::Rgb(46, 58, 66);
+  s.rules[static_cast<size_t>(K::kBoundaryCountry)].color = Color::Rgb(117, 123, 130);
+  s.rules[static_cast<size_t>(K::kBoundaryRegion)].color = Color::Rgb(91, 97, 105);
+  s.rules[static_cast<size_t>(K::kBoundaryLocal)].color = Color::Rgb(66, 74, 82);
   s.rules[static_cast<size_t>(K::kBuilding)].color = Color::Rgb(23, 27, 30);
   s.rules[static_cast<size_t>(K::kPark)].color = Color::Rgb(22, 32, 26);
   s.rules[static_cast<size_t>(K::kAirport)].color = Color::Rgb(61, 74, 82);
@@ -81,7 +90,7 @@ MapStyle BuildStandardLight() {
   MapStyle s;
   s.id = "standard-light";
   s.display_name = "Standard Light";
-  s.version = 1;
+  s.version = 3;
   s.label_scale = 1.0f;
 
   // Conventional daytime cartography -- OrcMaps' generic, application-
@@ -99,6 +108,9 @@ MapStyle BuildStandardLight() {
   s.rules[static_cast<size_t>(K::kMinorRoad)].width_px = 1.0f;
   s.rules[static_cast<size_t>(K::kRail)].color = Color::Rgb(185, 180, 168);
   s.rules[static_cast<size_t>(K::kBoundary)].color = Color::Rgb(183, 159, 203);
+  s.rules[static_cast<size_t>(K::kBoundaryCountry)].color = Color::Rgb(111, 91, 125);
+  s.rules[static_cast<size_t>(K::kBoundaryRegion)].color = Color::Rgb(141, 122, 154);
+  s.rules[static_cast<size_t>(K::kBoundaryLocal)].color = Color::Rgb(175, 159, 185);
   s.rules[static_cast<size_t>(K::kBuilding)].color = Color::Rgb(217, 211, 197);
   s.rules[static_cast<size_t>(K::kPark)].color = Color::Rgb(200, 227, 176);
   s.rules[static_cast<size_t>(K::kAirport)].color = Color::Rgb(201, 182, 217);
@@ -115,7 +127,7 @@ MapStyle BuildHighContrastField() {
   MapStyle s;
   s.id = "high-contrast-field";
   s.display_name = "High Contrast / Field";
-  s.version = 1;
+  s.version = 3;
   s.label_scale = 1.3f;  // Larger labels, per docs/STYLING.md.
   s.label_priority_threshold = 2;  // Only higher-priority labels draw.
 
@@ -136,6 +148,9 @@ MapStyle BuildHighContrastField() {
   s.rules[static_cast<size_t>(K::kRail)].visible = false;  // Reduce clutter.
   s.rules[static_cast<size_t>(K::kBoundary)].color = Color::Rgb(176, 0, 32);
   s.rules[static_cast<size_t>(K::kBoundary)].width_px = 1.5f;
+  s.rules[static_cast<size_t>(K::kBoundaryCountry)].color = Color::Rgb(83, 58, 91);
+  s.rules[static_cast<size_t>(K::kBoundaryRegion)].color = Color::Rgb(119, 95, 128);
+  s.rules[static_cast<size_t>(K::kBoundaryLocal)].color = Color::Rgb(155, 137, 163);
   s.rules[static_cast<size_t>(K::kBuilding)].color = Color::Rgb(208, 208, 208);
   s.rules[static_cast<size_t>(K::kPark)].color = Color::Rgb(63, 143, 70);
   s.rules[static_cast<size_t>(K::kAirport)].color = Color::Rgb(13, 71, 161);
@@ -155,7 +170,7 @@ MapStyle BuildNightRedSafe() {
   MapStyle s;
   s.id = "night-red-safe";
   s.display_name = "Night / Red-Safe";
-  s.version = 1;
+  s.version = 3;
   s.label_scale = 1.0f;
 
   // Dark-adaptation-preserving: black background, deep reds only, no
@@ -174,6 +189,9 @@ MapStyle BuildNightRedSafe() {
   s.rules[static_cast<size_t>(K::kMinorRoad)].width_px = 1.0f;
   s.rules[static_cast<size_t>(K::kRail)].color = Color::Rgb(58, 10, 10);
   s.rules[static_cast<size_t>(K::kBoundary)].color = Color::Rgb(74, 16, 16);
+  s.rules[static_cast<size_t>(K::kBoundaryCountry)].color = Color::Rgb(116, 24, 24);
+  s.rules[static_cast<size_t>(K::kBoundaryRegion)].color = Color::Rgb(91, 19, 19);
+  s.rules[static_cast<size_t>(K::kBoundaryLocal)].color = Color::Rgb(66, 14, 14);
   s.rules[static_cast<size_t>(K::kBuilding)].color = Color::Rgb(28, 5, 5);
   s.rules[static_cast<size_t>(K::kPark)].color = Color::Rgb(36, 8, 8);  // Deliberately not green.
   s.rules[static_cast<size_t>(K::kAirport)].color = Color::Rgb(122, 24, 24);
