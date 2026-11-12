@@ -24,5 +24,7 @@ jobs:
           python-version: "3.11"
       - name: Test data provenance checker
         run: python -m unittest discover -s tests -p 'test_data_provenance.py' -v
+      - name: Test US-state map pack builder
+        run: python -m unittest discover -s tests -p 'test_us_state_packs.py' -v
       - name: Check data provenance
         run: python tools/check_data_provenance.py
