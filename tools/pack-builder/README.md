@@ -204,3 +204,13 @@ Measured on an 84 MB Oregon source, z1-13 (go-pmtiles 1.28.2):
 | 25 km | 384 | 4.06 MB | 276 ms |
 | 50 km | 1,218 | 7.34 MB | 249 ms |
 | 100 km | 4,526 | 20.30 MB | 295 ms |
+
+## U.S. state batch packs
+
+`build_us_state_packs.py` uses the existing regional extractor and a verified
+local PMTiles source to plan/build all 50 state map targets (Alaska is split
+into two parts across the International Date Line). Nothing is built by
+default; pass `--execute` after reviewing the plan. All outputs are local
+immutable PMTiles v3 triplets. The JSON target list does **not** claim that
+maps have been hosted or made downloadable. See
+[`docs/US_STATE_PACKS.md`](../../docs/US_STATE_PACKS.md) for complete details.

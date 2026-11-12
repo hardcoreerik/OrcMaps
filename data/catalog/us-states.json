@@ -1,0 +1,970 @@
+{
+  "catalog_version": 1,
+  "catalog_kind": "build-targets-not-downloads",
+  "description": "Approximate padded rectangular coverage targets for producing OrcMaps PMTiles v3 regional packs; entries are not prebuilt or download-ready.",
+  "geometry_reference": "https://github.com/PublicaMundi/MappingAPI/blob/master/data/geojson/us-states.json",
+  "bounds_policy": "Simplified state outer extents expanded by 0.15 degrees; not authoritative legal boundaries. Alaska split across the antimeridian into two installable parts.",
+  "source_requirements": "One locally staged PMTiles v3 OpenMapTiles-profile archive and matching verified OrcMaps manifest covering requested bounds/zooms.",
+  "states": [
+    {
+      "code": "AK",
+      "name": "Alaska",
+      "region_id": "US-AK",
+      "min_zoom": 7,
+      "max_zoom": 10,
+      "parts": [
+        {
+          "stem": "us-ak-americas",
+          "display_name": "Alaska (main / western longitudes)",
+          "bbox": [
+            -180,
+            51.3,
+            -129.8,
+            71.6
+          ]
+        },
+        {
+          "stem": "us-ak-aleutians",
+          "display_name": "Alaska (Aleutians / eastern longitudes)",
+          "bbox": [
+            170.9,
+            51.3,
+            180,
+            56
+          ]
+        }
+      ]
+    },
+    {
+      "code": "AL",
+      "name": "Alabama",
+      "region_id": "US-AL",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-al",
+          "display_name": "Alabama",
+          "bbox": [
+            -88.621,
+            30.097,
+            -84.739,
+            35.151
+          ]
+        }
+      ]
+    },
+    {
+      "code": "AR",
+      "name": "Arkansas",
+      "region_id": "US-AR",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-ar",
+          "display_name": "Arkansas",
+          "bbox": [
+            -94.766,
+            32.852,
+            -89.581,
+            36.652
+          ]
+        }
+      ]
+    },
+    {
+      "code": "AZ",
+      "name": "Arizona",
+      "region_id": "US-AZ",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-az",
+          "display_name": "Arizona",
+          "bbox": [
+            -114.965,
+            31.182,
+            -108.893,
+            37.156
+          ]
+        }
+      ]
+    },
+    {
+      "code": "CA",
+      "name": "California",
+      "region_id": "US-CA",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-ca",
+          "display_name": "California",
+          "bbox": [
+            -124.561,
+            32.387,
+            -113.986,
+            42.162
+          ]
+        }
+      ]
+    },
+    {
+      "code": "CO",
+      "name": "Colorado",
+      "region_id": "US-CO",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-co",
+          "display_name": "Colorado",
+          "bbox": [
+            -109.209,
+            36.845,
+            -101.893,
+            41.154
+          ]
+        }
+      ]
+    },
+    {
+      "code": "CT",
+      "name": "Connecticut",
+      "region_id": "US-CT",
+      "min_zoom": 7,
+      "max_zoom": 12,
+      "parts": [
+        {
+          "stem": "us-ct",
+          "display_name": "Connecticut",
+          "bbox": [
+            -73.877,
+            40.837,
+            -71.649,
+            42.2
+          ]
+        }
+      ]
+    },
+    {
+      "code": "DE",
+      "name": "Delaware",
+      "region_id": "US-DE",
+      "min_zoom": 7,
+      "max_zoom": 12,
+      "parts": [
+        {
+          "stem": "us-de",
+          "display_name": "Delaware",
+          "bbox": [
+            -75.937,
+            38.302,
+            -74.897,
+            39.982
+          ]
+        }
+      ]
+    },
+    {
+      "code": "FL",
+      "name": "Florida",
+      "region_id": "US-FL",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-fl",
+          "display_name": "Florida",
+          "bbox": [
+            -87.783,
+            24.971,
+            -79.881,
+            31.153
+          ]
+        }
+      ]
+    },
+    {
+      "code": "GA",
+      "name": "Georgia",
+      "region_id": "US-GA",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-ga",
+          "display_name": "Georgia",
+          "bbox": [
+            -85.757,
+            30.207,
+            -80.736,
+            35.151
+          ]
+        }
+      ]
+    },
+    {
+      "code": "HI",
+      "name": "Hawaii",
+      "region_id": "US-HI",
+      "min_zoom": 7,
+      "max_zoom": 12,
+      "parts": [
+        {
+          "stem": "us-hi",
+          "display_name": "Hawaii",
+          "bbox": [
+            -160.4,
+            18.798,
+            -154.658,
+            22.379
+          ]
+        }
+      ]
+    },
+    {
+      "code": "IA",
+      "name": "Iowa",
+      "region_id": "US-IA",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-ia",
+          "display_name": "Iowa",
+          "bbox": [
+            -96.782,
+            40.23,
+            -89.992,
+            43.651
+          ]
+        }
+      ]
+    },
+    {
+      "code": "ID",
+      "name": "Idaho",
+      "region_id": "US-ID",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-id",
+          "display_name": "Idaho",
+          "bbox": [
+            -117.391,
+            41.845,
+            -110.897,
+            49.15
+          ]
+        }
+      ]
+    },
+    {
+      "code": "IL",
+      "name": "Illinois",
+      "region_id": "US-IL",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-il",
+          "display_name": "Illinois",
+          "bbox": [
+            -91.655,
+            36.834,
+            -87.346,
+            42.66
+          ]
+        }
+      ]
+    },
+    {
+      "code": "IN",
+      "name": "Indiana",
+      "region_id": "US-IN",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-in",
+          "display_name": "Indiana",
+          "bbox": [
+            -88.21,
+            37.639,
+            -84.652,
+            41.91
+          ]
+        }
+      ]
+    },
+    {
+      "code": "KS",
+      "name": "Kansas",
+      "region_id": "US-KS",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-ks",
+          "display_name": "Kansas",
+          "bbox": [
+            -102.204,
+            36.845,
+            -94.461,
+            40.152
+          ]
+        }
+      ]
+    },
+    {
+      "code": "KY",
+      "name": "Kentucky",
+      "region_id": "US-KY",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-ky",
+          "display_name": "Kentucky",
+          "bbox": [
+            -89.569,
+            36.346,
+            -81.82,
+            39.253
+          ]
+        }
+      ]
+    },
+    {
+      "code": "LA",
+      "name": "Louisiana",
+      "region_id": "US-LA",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-la",
+          "display_name": "Louisiana",
+          "bbox": [
+            -94.191,
+            28.859,
+            -88.852,
+            33.169
+          ]
+        }
+      ]
+    },
+    {
+      "code": "MA",
+      "name": "Massachusetts",
+      "region_id": "US-MA",
+      "min_zoom": 7,
+      "max_zoom": 12,
+      "parts": [
+        {
+          "stem": "us-ma",
+          "display_name": "Massachusetts",
+          "bbox": [
+            -73.658,
+            41.347,
+            -69.787,
+            43.038
+          ]
+        }
+      ]
+    },
+    {
+      "code": "MD",
+      "name": "Maryland",
+      "region_id": "US-MD",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-md",
+          "display_name": "Maryland",
+          "bbox": [
+            -79.639,
+            37.759,
+            -74.897,
+            39.872
+          ]
+        }
+      ]
+    },
+    {
+      "code": "ME",
+      "name": "Maine",
+      "region_id": "US-ME",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-me",
+          "display_name": "Maine",
+          "bbox": [
+            -71.232,
+            42.908,
+            -66.83,
+            47.611
+          ]
+        }
+      ]
+    },
+    {
+      "code": "MI",
+      "name": "Michigan",
+      "region_id": "US-MI",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-mi",
+          "display_name": "Michigan",
+          "bbox": [
+            -90.565,
+            41.544,
+            -82.264,
+            48.323
+          ]
+        }
+      ]
+    },
+    {
+      "code": "MN",
+      "name": "Minnesota",
+      "region_id": "US-MN",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-mn",
+          "display_name": "Minnesota",
+          "bbox": [
+            -97.379,
+            43.351,
+            -89.466,
+            49.534
+          ]
+        }
+      ]
+    },
+    {
+      "code": "MO",
+      "name": "Missouri",
+      "region_id": "US-MO",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-mo",
+          "display_name": "Missouri",
+          "bbox": [
+            -95.916,
+            35.848,
+            -88.984,
+            40.765
+          ]
+        }
+      ]
+    },
+    {
+      "code": "MS",
+      "name": "Mississippi",
+      "region_id": "US-MS",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-ms",
+          "display_name": "Mississippi",
+          "bbox": [
+            -91.787,
+            30.031,
+            -87.949,
+            35.146
+          ]
+        }
+      ]
+    },
+    {
+      "code": "MT",
+      "name": "Montana",
+      "region_id": "US-MT",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-mt",
+          "display_name": "Montana",
+          "bbox": [
+            -116.198,
+            44.244,
+            -103.892,
+            49.15
+          ]
+        }
+      ]
+    },
+    {
+      "code": "NC",
+      "name": "North Carolina",
+      "region_id": "US-NC",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-nc",
+          "display_name": "North Carolina",
+          "bbox": [
+            -84.47,
+            33.696,
+            -75.565,
+            36.739
+          ]
+        }
+      ]
+    },
+    {
+      "code": "ND",
+      "name": "North Dakota",
+      "region_id": "US-ND",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-nd",
+          "display_name": "North Dakota",
+          "bbox": [
+            -104.198,
+            45.783,
+            -96.411,
+            49.15
+          ]
+        }
+      ]
+    },
+    {
+      "code": "NE",
+      "name": "Nebraska",
+      "region_id": "US-NE",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-ne",
+          "display_name": "Nebraska",
+          "bbox": [
+            -104.203,
+            39.852,
+            -95.156,
+            43.153
+          ]
+        }
+      ]
+    },
+    {
+      "code": "NH",
+      "name": "New Hampshire",
+      "region_id": "US-NH",
+      "min_zoom": 7,
+      "max_zoom": 12,
+      "parts": [
+        {
+          "stem": "us-nh",
+          "display_name": "New Hampshire",
+          "bbox": [
+            -72.694,
+            42.546,
+            -70.554,
+            45.453
+          ]
+        }
+      ]
+    },
+    {
+      "code": "NJ",
+      "name": "New Jersey",
+      "region_id": "US-NJ",
+      "min_zoom": 7,
+      "max_zoom": 12,
+      "parts": [
+        {
+          "stem": "us-nj",
+          "display_name": "New Jersey",
+          "bbox": [
+            -75.712,
+            38.844,
+            -73.752,
+            41.51
+          ]
+        }
+      ]
+    },
+    {
+      "code": "NM",
+      "name": "New Mexico",
+      "region_id": "US-NM",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-nm",
+          "display_name": "New Mexico",
+          "bbox": [
+            -109.198,
+            31.182,
+            -102.851,
+            37.15
+          ]
+        }
+      ]
+    },
+    {
+      "code": "NV",
+      "name": "Nevada",
+      "region_id": "US-NV",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-nv",
+          "display_name": "Nevada",
+          "bbox": [
+            -120.152,
+            34.851,
+            -113.893,
+            42.151
+          ]
+        }
+      ]
+    },
+    {
+      "code": "NY",
+      "name": "New York",
+      "region_id": "US-NY",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-ny",
+          "display_name": "New York",
+          "bbox": [
+            -79.913,
+            40.394,
+            -71.951,
+            45.169
+          ]
+        }
+      ]
+    },
+    {
+      "code": "OH",
+      "name": "Ohio",
+      "region_id": "US-OH",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-oh",
+          "display_name": "Ohio",
+          "bbox": [
+            -84.968,
+            38.274,
+            -80.369,
+            42.129
+          ]
+        }
+      ]
+    },
+    {
+      "code": "OK",
+      "name": "Oklahoma",
+      "region_id": "US-OK",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-ok",
+          "display_name": "Oklahoma",
+          "bbox": [
+            -103.151,
+            33.487,
+            -94.28,
+            37.15
+          ]
+        }
+      ]
+    },
+    {
+      "code": "OR",
+      "name": "Oregon",
+      "region_id": "US-OR",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-or",
+          "display_name": "Oregon",
+          "bbox": [
+            -124.703,
+            41.84,
+            -116.314,
+            46.412
+          ]
+        }
+      ]
+    },
+    {
+      "code": "PA",
+      "name": "Pennsylvania",
+      "region_id": "US-PA",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-pa",
+          "display_name": "Pennsylvania",
+          "bbox": [
+            -80.669,
+            39.572,
+            -74.547,
+            42.419
+          ]
+        }
+      ]
+    },
+    {
+      "code": "RI",
+      "name": "Rhode Island",
+      "region_id": "US-RI",
+      "min_zoom": 7,
+      "max_zoom": 13,
+      "parts": [
+        {
+          "stem": "us-ri",
+          "display_name": "Rhode Island",
+          "bbox": [
+            -72.01,
+            41.172,
+            -70.97,
+            42.167
+          ]
+        }
+      ]
+    },
+    {
+      "code": "SC",
+      "name": "South Carolina",
+      "region_id": "US-SC",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-sc",
+          "display_name": "South Carolina",
+          "bbox": [
+            -83.489,
+            31.883,
+            -78.391,
+            35.348
+          ]
+        }
+      ]
+    },
+    {
+      "code": "SD",
+      "name": "South Dakota",
+      "region_id": "US-SD",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-sd",
+          "display_name": "South Dakota",
+          "bbox": [
+            -104.208,
+            42.338,
+            -96.285,
+            46.094
+          ]
+        }
+      ]
+    },
+    {
+      "code": "TN",
+      "name": "Tennessee",
+      "region_id": "US-TN",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-tn",
+          "display_name": "Tennessee",
+          "bbox": [
+            -90.461,
+            34.835,
+            -81.53,
+            36.827
+          ]
+        }
+      ]
+    },
+    {
+      "code": "TX",
+      "name": "Texas",
+      "region_id": "US-TX",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-tx",
+          "display_name": "Texas",
+          "bbox": [
+            -106.794,
+            25.738,
+            -93.376,
+            36.652
+          ]
+        }
+      ]
+    },
+    {
+      "code": "UT",
+      "name": "Utah",
+      "region_id": "US-UT",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-ut",
+          "display_name": "Utah",
+          "bbox": [
+            -114.198,
+            36.85,
+            -108.893,
+            42.151
+          ]
+        }
+      ]
+    },
+    {
+      "code": "VA",
+      "name": "Virginia",
+      "region_id": "US-VA",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-va",
+          "display_name": "Virginia",
+          "bbox": [
+            -83.823,
+            36.39,
+            -75.094,
+            39.615
+          ]
+        }
+      ]
+    },
+    {
+      "code": "VT",
+      "name": "Vermont",
+      "region_id": "US-VT",
+      "min_zoom": 7,
+      "max_zoom": 12,
+      "parts": [
+        {
+          "stem": "us-vt",
+          "display_name": "Vermont",
+          "bbox": [
+            -73.587,
+            42.579,
+            -71.343,
+            45.163
+          ]
+        }
+      ]
+    },
+    {
+      "code": "WA",
+      "name": "Washington",
+      "region_id": "US-WA",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-wa",
+          "display_name": "Washington",
+          "bbox": [
+            -124.857,
+            45.4,
+            -116.768,
+            49.15
+          ]
+        }
+      ]
+    },
+    {
+      "code": "WI",
+      "name": "Wisconsin",
+      "region_id": "US-WI",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-wi",
+          "display_name": "Wisconsin",
+          "bbox": [
+            -93.036,
+            42.344,
+            -86.881,
+            47.107
+          ]
+        }
+      ]
+    },
+    {
+      "code": "WV",
+      "name": "West Virginia",
+      "region_id": "US-WV",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-wv",
+          "display_name": "West Virginia",
+          "bbox": [
+            -82.772,
+            37.053,
+            -77.57,
+            40.787
+          ]
+        }
+      ]
+    },
+    {
+      "code": "WY",
+      "name": "Wyoming",
+      "region_id": "US-WY",
+      "min_zoom": 7,
+      "max_zoom": 11,
+      "parts": [
+        {
+          "stem": "us-wy",
+          "display_name": "Wyoming",
+          "bbox": [
+            -111.203,
+            40.848,
+            -103.903,
+            45.152
+          ]
+        }
+      ]
+    }
+  ]
+}
