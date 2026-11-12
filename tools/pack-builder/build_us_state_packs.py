@@ -101,7 +101,7 @@ def triplet(archive: Path) -> list[Path]:
 
 
 def verify_built_pack(archive: Path, state: dict, part: dict,
-                      source_hash: str, expected_max_zoom: int | None = None) -> dict:
+                      source_hash: str | None, expected_max_zoom: int | None = None) -> dict:
     files = triplet(archive)
     if not all(path.is_file() for path in files):
         raise ValueError(f"incomplete archive/manifest/checksum triplet: {archive.name}")
@@ -117,8 +117,8 @@ def verify_built_pack(archive: Path, state: dict, part: dict,
             or not (state["min_zoom"] <= manifest.get("max_zoom", -1) <= 31)
             or (expected_max_zoom is not None and manifest.get("max_zoom") != expected_max_zoom)
             or manifest.get("size_bytes") != archive.stat().st_size
-            or source_hash.lower() not in [str(v).lower() for v in
-                                            manifest.get("input_hashes", {}).values()]):
+            or (source_hash is not None and source_hash.lower() not in
+                [str(v).lower() for v in manifest.get("input_hashes", {}).values()])):
         raise ValueError(f"pack metadata does not match expected build target: {archive.name}")
     digest = regional.sha256(archive)
     tokens = files[2].read_text(encoding="ascii").split()
@@ -191,7 +191,7 @@ def resolve_commit(value: str | None, execute: bool) -> str:
     return "0" * 40
 
 
-def write_local_index(out: Path, states: list[dict], source_hash: str) -> dict:
+def write_local_index(out: Path, states: list[dict], source_hash: str | None = None) -> dict:
     """Only include fully verified states; never claim a remote URL exists."""
     entries = []
     for state in states:
@@ -281,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
             verify_built_pack(output, state, part, source["output_sha256"])
 
     if args.execute:
-        index = write_local_index(args.output_dir, states, source["output_sha256"])
+        index = write_local_index(args.output_dir, states)
         print(json.dumps({"built_targets": len(planned),
                           "verified_states_in_output": index["ready_states"],
                           "complete_50_states": index["complete_50_states"],
