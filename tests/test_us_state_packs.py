@@ -16,6 +16,12 @@ sys.path.insert(0, str(BUILDER_DIR))
 import build_us_state_packs as states
 
 
+def pmtiles_bytes(min_zoom: int, max_zoom: int) -> bytes:
+    header = bytearray(b"PMTiles" + bytes(120))
+    header[100], header[101] = min_zoom, max_zoom
+    return bytes(header)
+
+
 class UsStatePackTests(unittest.TestCase):
     def setUp(self):
         self.catalog = states.load_catalog()
@@ -41,6 +47,17 @@ class UsStatePackTests(unittest.TestCase):
         self.assertLess(west["bbox"][2] - west["bbox"][0], 100)
         self.assertLess(east["bbox"][2] - east["bbox"][0], 15)
 
+    def test_hawaii_includes_niihau(self):
+        self.assertLessEqual(self.by_code["HI"]["parts"][0]["bbox"][0], -160.25)
+
+    def test_source_header_zoom_is_checked(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive, _, source = self.fixture(Path(temp))
+            archive.write_bytes(pmtiles_bytes(0, 8))
+            source["size_bytes"] = archive.stat().st_size
+            with self.assertRaisesRegex(ValueError, "header"):
+                states.source_preflight(archive, source, [self.by_code["OR"]], None, False)
+
     def test_state_selection_is_strict(self):
         self.assertEqual(["OR", "WA"], [s["code"] for s in states.selected_states(
             self.catalog, ["Oregon", "US-WA"])])
@@ -51,7 +68,7 @@ class UsStatePackTests(unittest.TestCase):
 
     def fixture(self, directory: Path):
         archive = directory / "united-states.pmtiles"
-        archive.write_bytes(b"PMTiles\x03" + bytes(120))
+        archive.write_bytes(pmtiles_bytes(0, 13))
         sha = hashlib.sha256(archive.read_bytes()).hexdigest()
         manifest = {
             "bounds": {"min_lon": -180, "min_lat": 15, "max_lon": 180, "max_lat": 75},
@@ -110,7 +127,7 @@ class UsStatePackTests(unittest.TestCase):
             state = self.by_code["OR"]
             part = state["parts"][0]
             archive = dest / (part["stem"] + ".pmtiles")
-            archive.write_bytes(b"PMTiles\x03" + bytes(120))
+            archive.write_bytes(pmtiles_bytes(state["min_zoom"], state["max_zoom"]))
             sha = hashlib.sha256(archive.read_bytes()).hexdigest()
             source_sha = "b" * 64
             meta = {
@@ -143,13 +160,42 @@ class UsStatePackTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "metadata|corrupt"):
                 states.write_local_index(dest, self.catalog, source_sha)
 
+    def test_index_skips_partial_state_and_reports_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            dest = Path(temp)
+            (dest / "us-ca.pmtiles").write_bytes(pmtiles_bytes(7, 11))
+            index = states.write_local_index(dest, self.catalog)
+            self.assertEqual(0, index["ready_states"])
+            self.assertEqual(["us-ca"], index["incomplete_parts"])
+            self.assertTrue((dest / "us-states-built.json").is_file())
+
+    def test_built_header_must_match_manifest(self):
+        with tempfile.TemporaryDirectory() as temp:
+            dest = Path(temp)
+            state = self.by_code["OR"]
+            part = state["parts"][0]
+            archive = dest / (part["stem"] + ".pmtiles")
+            archive.write_bytes(pmtiles_bytes(state["min_zoom"], state["max_zoom"] - 1))
+            sha = hashlib.sha256(archive.read_bytes()).hexdigest()
+            meta = {
+                "region_id": state["region_id"], "display_name": part["display_name"],
+                "bounds": dict(zip(("min_lon", "min_lat", "max_lon", "max_lat"), part["bbox"])),
+                "schema_version": "openmaptiles-3.16",
+                "min_zoom": state["min_zoom"], "max_zoom": state["max_zoom"],
+                "size_bytes": archive.stat().st_size, "output_sha256": sha,
+            }
+            archive.with_suffix(".manifest.json").write_text(json.dumps(meta))
+            archive.with_suffix(".sha256").write_text(f"{sha}  {archive.name}\n")
+            with self.assertRaisesRegex(ValueError, "header"):
+                states.verify_built_pack(archive, state, part, None)
+
     def test_resume_rejects_wrong_zoom(self):
         with tempfile.TemporaryDirectory() as temp:
             dest = Path(temp)
             state = self.by_code["OR"]
             part = state["parts"][0]
             archive = dest / (part["stem"] + ".pmtiles")
-            archive.write_bytes(b"PMTiles\x03" + bytes(120))
+            archive.write_bytes(pmtiles_bytes(state["min_zoom"], state["max_zoom"]))
             sha = hashlib.sha256(archive.read_bytes()).hexdigest()
             source_sha = "a" * 64
             meta = {

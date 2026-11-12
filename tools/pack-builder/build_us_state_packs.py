@@ -74,6 +74,15 @@ def selected_states(states: list[dict], selectors: list[str]) -> list[dict]:
         matched.add(found[0]["code"])
     return [state for state in states if state["code"] in matched]
 
+def header_zooms(archive: Path) -> tuple[int, int]:
+    """Return (min_zoom, max_zoom) from a PMTiles v3 header (bytes 100 and 101)."""
+    with archive.open("rb") as stream:
+        header = stream.read(127)
+    if len(header) < 127 or header[:8] != b"PMTiles":
+        raise ValueError(f"not a PMTiles v3 archive: {archive.name}")
+    return header[100], header[101]
+
+
 def source_preflight(archive: Path, manifest: dict, states: list[dict],
                      zoom_override: int | None, verify_hash: bool) -> None:
     if not archive.is_file():
@@ -82,6 +91,7 @@ def source_preflight(archive: Path, manifest: dict, states: list[dict],
         raise ValueError("state builds require a supported OpenMapTiles 3.16 PMTiles v3 source")
     if archive.stat().st_size != manifest.get("size_bytes"):
         raise ValueError("source archive size differs from manifest")
+    header_min, header_max = header_zooms(archive)
     sb = manifest["bounds"]
     for state in states:
         zmax = state["max_zoom"] if zoom_override is None else zoom_override
@@ -89,6 +99,8 @@ def source_preflight(archive: Path, manifest: dict, states: list[dict],
             raise ValueError("invalid zoom override")
         if state["min_zoom"] < manifest["min_zoom"] or zmax > manifest["max_zoom"]:
             raise ValueError(f"{state['code']}: source has insufficient zoom coverage")
+        if state["min_zoom"] < header_min or zmax > header_max:
+            raise ValueError(f"{state['code']}: source archive header has insufficient zoom coverage")
         for part in state["parts"]:
             w, s, e, n = part["bbox"]
             if (w < sb["min_lon"] or s < sb["min_lat"] or
@@ -115,6 +127,10 @@ def verify_built_pack(archive: Path, state: dict, part: dict,
         if archive.stat().st_size < 127 or stream.read(8) != b"PMTiles\x03":
             raise ValueError(f"not a PMTiles v3 archive: {archive.name}")
     manifest = json.loads(files[1].read_text(encoding="utf-8"))
+    header_min, header_max = header_zooms(archive)
+    if (header_min != manifest.get("min_zoom")
+            or header_max < manifest.get("max_zoom", 32)):
+        raise ValueError(f"pack header zoom range does not match its manifest: {archive.name}")
     expected_bounds = dict(zip(("min_lon", "min_lat", "max_lon", "max_lat"), part["bbox"]))
     if (manifest.get("region_id") != state["region_id"]
             or manifest.get("bounds") != expected_bounds
@@ -200,11 +216,15 @@ def resolve_commit(value: str | None, execute: bool) -> str:
 def write_local_index(out: Path, states: list[dict], source_hash: str | None = None) -> dict:
     """Only include fully verified states; never claim a remote URL exists."""
     entries = []
+    incomplete = []
     for state in states:
         parts = []
         for part in state["parts"]:
             archive = out / (part["stem"] + ".pmtiles")
-            if not any(path.exists() for path in triplet(archive)):
+            present = [path.exists() for path in triplet(archive)]
+            if not all(present):
+                if any(present):
+                    incomplete.append(part["stem"])
                 parts = []
                 break
             parts.append(verify_built_pack(archive, state, part, source_hash))
@@ -217,6 +237,7 @@ def write_local_index(out: Path, states: list[dict], source_hash: str | None = N
         "downloadable": False,
         "notes": "Local artifact inventory only. Upload/verify archives before publishing URLs or advertising downloads.",
         "ready_states": len(entries),
+        "incomplete_parts": incomplete,
         "complete_50_states": len(entries) == 50,
         "states": entries,
     }

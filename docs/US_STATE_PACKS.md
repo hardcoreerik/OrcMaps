@@ -103,6 +103,12 @@ are never replaced by default; --resume verifies complete outputs and
 --force explicitly replaces them. A different zoom profile is not silently
 accepted by resume.
 
+If a run stops while writing one pack, that pack can be left with only some
+of its archive, manifest and checksum files. Resume refuses it, and the
+local index lists it under incomplete_parts instead of aborting. Check the
+partial files, delete them by hand, then run again with --resume; or rebuild
+that one state with --force. Nothing is deleted automatically.
+
 ## Validation and SD installation
 
 1. Run:
