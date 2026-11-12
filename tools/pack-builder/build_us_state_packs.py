@@ -101,12 +101,12 @@ def triplet(archive: Path) -> list[Path]:
 
 
 def verify_built_pack(archive: Path, state: dict, part: dict,
-                      source_hash: str) -> dict:
+                      source_hash: str, expected_max_zoom: int | None = None) -> dict:
     files = triplet(archive)
     if not all(path.is_file() for path in files):
         raise ValueError(f"incomplete archive/manifest/checksum triplet: {archive.name}")
     with archive.open("rb") as stream:
-        if stream.read(8) != b"PMTiles\x03":
+        if archive.stat().st_size < 127 or stream.read(8) != b"PMTiles\x03":
             raise ValueError(f"not a PMTiles v3 archive: {archive.name}")
     manifest = json.loads(files[1].read_text(encoding="utf-8"))
     expected_bounds = dict(zip(("min_lon", "min_lat", "max_lon", "max_lat"), part["bbox"]))
@@ -114,6 +114,8 @@ def verify_built_pack(archive: Path, state: dict, part: dict,
             or manifest.get("bounds") != expected_bounds
             or manifest.get("schema_version") != "openmaptiles-3.16"
             or manifest.get("min_zoom") != state["min_zoom"]
+            or not (state["min_zoom"] <= manifest.get("max_zoom", -1) <= 31)
+            or (expected_max_zoom is not None and manifest.get("max_zoom") != expected_max_zoom)
             or manifest.get("size_bytes") != archive.stat().st_size
             or source_hash.lower() not in [str(v).lower() for v in
                                             manifest.get("input_hashes", {}).values()]):
@@ -262,7 +264,8 @@ def main(argv: list[str] | None = None) -> int:
             output = args.output_dir / (part["stem"] + ".pmtiles")
             if any(path.exists() for path in triplet(output)):
                 if args.resume:
-                    verify_built_pack(output, state, part, source["output_sha256"])
+                    verify_built_pack(output, state, part, source["output_sha256"],
+                                      state["max_zoom"] if args.max_zoom is None else args.max_zoom)
                 else:
                     raise FileExistsError(f"existing pack: {output}; use --resume or --force")
 
