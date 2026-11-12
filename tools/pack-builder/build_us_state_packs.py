@@ -22,6 +22,12 @@ import provision_pack as provision
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG = ROOT / "data" / "catalog" / "us-states.json"
 SUFFIXES = (".pmtiles", ".manifest.json", ".sha256")
+EXPECTED_STATE_CODES = frozenset(
+    "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI "
+    "MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX "
+    "UT VT VA WA WV WI WY".split()
+)
+
 
 
 def load_catalog(path: Path = CATALOG) -> list[dict]:
@@ -30,7 +36,7 @@ def load_catalog(path: Path = CATALOG) -> list[dict]:
         raise ValueError("unsupported US state build catalog")
     states = document["states"]
     codes = [state["code"] for state in states]
-    if len(states) != 50 or len(set(codes)) != 50:
+    if len(states) != 50 or set(codes) != EXPECTED_STATE_CODES:
         raise ValueError("state catalog must have 50 distinct states")
     stems = set()
     for state in states:
