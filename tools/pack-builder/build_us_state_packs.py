@@ -58,15 +58,15 @@ def load_catalog(path: Path = CATALOG) -> list[dict]:
 def selected_states(states: list[dict], selectors: list[str]) -> list[dict]:
     if not selectors:
         return states
-    result = []
-    for state in states:
-        if any(selector.upper().removeprefix("US-") in
-               (state["code"], state["name"].upper()) for selector in selectors):
-            result.append(state)
-    if len(result) != len({selector.upper().removeprefix("US-") for selector in selectors}):
-        raise ValueError("unknown or duplicate --state selector")
-    return result
-
+    matched = set()
+    for selector in selectors:
+        lookup = selector.strip().upper().removeprefix("US-")
+        found = [state for state in states
+                 if lookup in (state["code"], state["name"].upper())]
+        if len(found) != 1 or found[0]["code"] in matched:
+            raise ValueError(f"unknown or duplicate --state selector: {selector}")
+        matched.add(found[0]["code"])
+    return [state for state in states if state["code"] in matched]
 
 def source_preflight(archive: Path, manifest: dict, states: list[dict],
                      zoom_override: int | None, verify_hash: bool) -> None:
