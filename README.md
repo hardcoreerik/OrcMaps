@@ -92,6 +92,16 @@ data/sources/          Data provenance registry
 docs/                  Architecture, format decision, porting, licensing docs
 ```
 
+## U.S. state map pack production
+
+A production catalog now defines regional map build targets for all **50 U.S. states**
+(51 non-crossing geographic parts, because Alaska crosses the date line). The
+host-only builder creates PMTiles v3 archive/manifest/SHA-256 triplets from a
+verified existing source; SD discovery still uses the same OrcMaps runtime.
+**These are build targets, not hosted/downloadable map files.** See
+[`docs/US_STATE_PACKS.md`](docs/US_STATE_PACKS.md) for commands, zoom tiers,
+source requirements and the OrcSDR publication handoff.
+
 ## License
 
 AGPL-3.0-only, with commercial licensing available by agreement — the same
