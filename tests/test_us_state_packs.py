@@ -24,6 +24,7 @@ class UsStatePackTests(unittest.TestCase):
     def test_all_fifty_states_and_unique_artifacts(self):
         self.assertEqual(50, len(self.catalog))
         self.assertEqual(50, len(self.by_code))
+        self.assertEqual(states.EXPECTED_STATE_CODES, set(self.by_code))
         self.assertEqual(51, sum(len(s["parts"]) for s in self.catalog))
         self.assertEqual(2, len(self.by_code["AK"]["parts"]))
         self.assertIn("HI", self.by_code)
@@ -130,6 +131,8 @@ class UsStatePackTests(unittest.TestCase):
                 f"{sha}  {archive.name}\n", encoding="ascii")
             index = states.write_local_index(dest, self.catalog, source_sha)
             self.assertEqual(1, index["ready_states"])
+            # Another state can use a distinct independently verified source pack.
+            self.assertEqual(1, states.write_local_index(dest, self.catalog)["ready_states"])
             self.assertFalse(index["downloadable"])
             self.assertFalse(index["complete_50_states"])
             self.assertEqual("OR", index["states"][0]["code"])
